@@ -5,6 +5,7 @@ line becomes two Samples sharing an `idx`, the key every pairwise metric groups 
 """
 
 import json
+import random
 import re
 from dataclasses import dataclass, field
 
@@ -72,3 +73,43 @@ def load_pairs(path, commit_mode="parent-of-fix"):
           f"-> {len(samples)} samples ({n_vuln} vuln / {len(samples) - n_vuln} benign)",
           flush=True)
     return samples
+
+
+def stratified_subsample(samples, n_pairs=120, seed=0):
+    """Draw about n_pairs pairs, stratified by (project, primary CWE).
+
+    Round-robins across strata so the sample is not dominated by whichever project
+    contributes the most pairs.
+    """
+    pairs = {}
+    for s in samples:
+        pairs.setdefault(s.pair_id, []).append(s)
+
+    def stratum(pid):
+        s = pairs[pid][0]
+        return (s.project, s.cwe[0] if s.cwe else "none")
+
+    groups = {}
+    for pid in sorted(pairs):
+        groups.setdefault(stratum(pid), []).append(pid)
+
+    rng = random.Random(seed)
+    strata = sorted(groups)
+    rng.shuffle(strata)
+    for k in strata:
+        rng.shuffle(groups[k])
+
+    selected = []
+    while len(selected) < n_pairs and any(groups[k] for k in strata):
+        for k in strata:
+            if groups[k]:
+                selected.append(groups[k].pop())
+            if len(selected) >= n_pairs:
+                break
+
+    out = []
+    for pid in selected:
+        out.extend(pairs[pid])
+    print(f"[data] subsample: {len(selected)} pairs over {len(strata)} strata "
+          f"(seed {seed}) -> {len(out)} samples", flush=True)
+    return out
