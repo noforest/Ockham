@@ -7,7 +7,10 @@ line becomes two Samples sharing an `idx`, the key every pairwise metric groups 
 import json
 import random
 import re
+import subprocess
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # Some bodies keep the language tag of the markdown fence they were extracted from.
 _FENCE_TAG = re.compile(r"^(c|cpp|cxx|h)\n", re.IGNORECASE)
@@ -113,3 +116,43 @@ def stratified_subsample(samples, n_pairs=120, seed=0):
     print(f"[data] subsample: {len(selected)} pairs over {len(strata)} strata "
           f"(seed {seed}) -> {len(out)} samples", flush=True)
     return out
+
+
+def _git(args, cwd):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+
+
+def bare_clone(project_url, project, workspace):
+    """Clone the repository once, blobless, and reuse it for every commit."""
+    repo_dir = (Path(workspace) / "repos" / f"{project}.git").resolve()
+    if not repo_dir.exists():
+        print(f"[data] cloning {project} ({project_url})...", flush=True)
+        t0 = time.time()
+        repo_dir.parent.mkdir(parents=True, exist_ok=True)
+        _git(["clone", "--bare", "--filter=blob:none", project_url, str(repo_dir)], cwd=None)
+        print(f"[data] clone {project}: {'ok' if repo_dir.exists() else 'FAILED'} "
+              f"({time.time() - t0:.0f}s)", flush=True)
+    return repo_dir if repo_dir.exists() else None
+
+
+def add_worktree(repo_dir, commit, project, workspace):
+    """Check the repository out at one commit, in its own detached worktree."""
+    wt_dir = (Path(workspace) / "worktrees" / f"{project}-{commit[:12]}").resolve()
+    if wt_dir.exists():
+        return wt_dir
+    print(f"[data] fetching {project}@{commit[:12]}...", flush=True)
+    t0 = time.time()
+    _git(["fetch", "origin", commit], cwd=repo_dir)
+    r = _git(["worktree", "add", "--detach", str(wt_dir), commit], cwd=repo_dir)
+    ok = r.returncode == 0
+    print(f"[data] worktree {project}@{commit[:12]}: {'ok' if ok else 'FAILED'} "
+          f"({time.time() - t0:.0f}s)", flush=True)
+    return wt_dir if ok else None
+
+
+def checkout(sample, workspace):
+    """The worktree holding this sample's commit, or None if it could not be built."""
+    repo_dir = bare_clone(sample.project_url, sample.project, workspace)
+    if repo_dir is None:
+        return None
+    return add_worktree(repo_dir, sample.commit, sample.project, workspace)
