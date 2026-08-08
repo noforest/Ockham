@@ -15,6 +15,8 @@ from pathlib import Path
 # Some bodies keep the language tag of the markdown fence they were extracted from.
 _FENCE_TAG = re.compile(r"^(c|cpp|cxx|h)\n", re.IGNORECASE)
 
+GIT_TIMEOUT_S = 300
+
 
 @dataclass
 class Sample:
@@ -119,7 +121,12 @@ def stratified_subsample(samples, n_pairs=120, seed=0):
 
 
 def _git(args, cwd):
-    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    """Run git, reporting a timeout as a failed call rather than hanging the run."""
+    try:
+        return subprocess.run(["git", *args], cwd=cwd, capture_output=True,
+                              text=True, timeout=GIT_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(args, 1, "", "timeout")
 
 
 def bare_clone(project_url, project, workspace):
