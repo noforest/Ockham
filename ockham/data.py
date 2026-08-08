@@ -29,7 +29,14 @@ def load_pairs(path, commit_mode="parent-of-fix"):
     instead of the parent of the fix. Ablation only.
     """
     with open(path, encoding="utf-8") as f:
-        rows = [json.loads(line) for line in f]
+        raw = [json.loads(line) for line in f]
+
+    # A repeated idx would put four samples under one pair_id, which no pairwise
+    # metric can group.
+    seen = {}
+    for d in raw:
+        seen.setdefault(d["idx"], d)
+    rows = list(seen.values())
 
     samples = []
     for d in rows:
@@ -53,6 +60,7 @@ def load_pairs(path, commit_mode="parent-of-fix"):
         ))
 
     n_vuln = sum(s.label == 1 for s in samples)
-    print(f"[data] {len(rows)} pairs -> {len(samples)} samples "
-          f"({n_vuln} vuln / {len(samples) - n_vuln} benign)", flush=True)
+    print(f"[data] {len(raw)} lines -> {len(rows)} pairs after idx dedup "
+          f"-> {len(samples)} samples ({n_vuln} vuln / {len(samples) - n_vuln} benign)",
+          flush=True)
     return samples
