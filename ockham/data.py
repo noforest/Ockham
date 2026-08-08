@@ -5,7 +5,11 @@ line becomes two Samples sharing an `idx`, the key every pairwise metric groups 
 """
 
 import json
+import re
 from dataclasses import dataclass, field
+
+# Some bodies keep the language tag of the markdown fence they were extracted from.
+_FENCE_TAG = re.compile(r"^(c|cpp|cxx|h)\n", re.IGNORECASE)
 
 
 @dataclass
@@ -20,6 +24,10 @@ class Sample:
     commit: str = ""        # the commit this half of the pair lives at
     func_body: str = ""
     label: int = 0          # 1 vulnerable, 0 benign
+
+
+def _clean_body(body):
+    return _FENCE_TAG.sub("", body, count=1).strip()
 
 
 def load_pairs(path, commit_mode="parent-of-fix"):
@@ -52,11 +60,11 @@ def load_pairs(path, commit_mode="parent-of-fix"):
         )
         samples.append(Sample(
             sample_id=f"{idx}-vuln", commit=vuln_commit,
-            func_body=d["vulnerable_function_body"], label=1, **common,
+            func_body=_clean_body(d["vulnerable_function_body"]), label=1, **common,
         ))
         samples.append(Sample(
             sample_id=f"{idx}-benign", commit=d["vulnerability_fixing_commit_id"],
-            func_body=d["non_vulnerable_function_body"], label=0, **common,
+            func_body=_clean_body(d["non_vulnerable_function_body"]), label=0, **common,
         ))
 
     n_vuln = sum(s.label == 1 for s in samples)
