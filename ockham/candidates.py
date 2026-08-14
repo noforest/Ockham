@@ -11,6 +11,7 @@ cell can be run twice and the gap between the two measured.
 import importlib
 import re
 import time
+from pathlib import Path
 
 from .pack import Candidate
 
@@ -98,10 +99,18 @@ def build_candidate_pool(sample, repo_dir):
         if not source:
             continue
         pool.append(Candidate(
-            name=name, file=str(path), line=int(line) if line else 0,
+            name=name, file=_relative(path, repo_dir), line=int(line) if line else 0,
             source=source, tokens=count_tokens(source),
         ))
     return pool
+
+
+def _relative(path, repo_dir):
+    """Repo-relative path. A backend may report either an absolute or a relative one."""
+    try:
+        return str(Path(path).resolve().relative_to(Path(repo_dir).resolve()))
+    except (ValueError, OSError):
+        return str(path)
 
 
 def target_line(sample):
