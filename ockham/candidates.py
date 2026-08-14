@@ -23,3 +23,18 @@ def guess_function_name(body):
     header = body.split("{", 1)[0]
     m = _FUNC_NAME_RE.search(header)
     return m.group(1) if m else None
+
+
+def enforce_budget(candidates, budget):
+    """Keep candidates, in the given order, while their source tokens fit the budget.
+
+    A candidate larger than the whole budget is skipped rather than truncated:
+    truncating a body would change the representation, not just the selection.
+    """
+    kept, used = [], 0
+    for c in candidates:
+        if used + c.tokens > budget:
+            break
+        kept.append(c)
+        used += c.tokens
+    return kept
