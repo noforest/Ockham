@@ -10,6 +10,7 @@ cell can be run twice and the gap between the two measured.
 
 import importlib
 import re
+import time
 
 _FUNC_NAME_RE = re.compile(r"([A-Za-z_]\w*)\s*\(")
 
@@ -17,6 +18,9 @@ BACKENDS = ("ts", "joern")
 
 _backend_name = "ts"
 _BACKEND = None
+_indexed = set()      # (backend, worktree) pairs already indexed
+_index_times = {}     # (backend, worktree) -> cost of its first index build, in seconds
+_index_counts = {}    # (backend, worktree) -> symbols found; 0 means the backend failed
 
 
 def set_backend(which):
@@ -26,6 +30,7 @@ def set_backend(which):
         raise ValueError(f"unknown backend {which!r}, expected one of {list(BACKENDS)}")
     _backend_name = which
     _BACKEND = None
+    _indexed.clear()
     return backend()
 
 
@@ -55,6 +60,24 @@ def guess_function_name(body):
     header = body.split("{", 1)[0]
     m = _FUNC_NAME_RE.search(header)
     return m.group(1) if m else None
+
+
+def ensure_indexed(repo_dir):
+    """Index a checkout unless the current backend has already indexed it.
+
+    Returns (index_time_s, n_symbols). A count of 0 means the backend failed on this
+    repository -- a parser timeout is a result to record, not an empty repository.
+    Only the first build of a worktree is timed, so a later re-index does not inflate
+    the reported cost.
+    """
+    key = (_backend_name, str(repo_dir))
+    if key not in _indexed:
+        t0 = time.time()
+        n = backend().index(repo_dir)
+        _indexed.add(key)
+        _index_times.setdefault(key, time.time() - t0)
+        _index_counts[key] = n
+    return _index_times.get(key, 0.0), _index_counts.get(key, 0)
 
 
 def enforce_budget(candidates, budget):
