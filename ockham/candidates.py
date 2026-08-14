@@ -12,6 +12,8 @@ import importlib
 import re
 import time
 
+from .pack import Candidate
+
 _FUNC_NAME_RE = re.compile(r"([A-Za-z_]\w*)\s*\(")
 
 BACKENDS = ("ts", "joern")
@@ -78,6 +80,35 @@ def ensure_indexed(repo_dir):
         _index_times.setdefault(key, time.time() - t0)
         _index_counts[key] = n
     return _index_times.get(key, 0.0), _index_counts.get(key, 0)
+
+
+def build_candidate_pool(sample, repo_dir):
+    """Enumerate the indexed functions into a fixed pool. Call ensure_indexed first.
+
+    Everything except the target itself, each candidate carrying its source and token
+    count so budget enforcement never has to go back to the backend. The pool comes
+    from this sample's own commit, so the patched sibling is not in it.
+    """
+    target_name = guess_function_name(sample.func_body)
+    pool = []
+    for name, (path, line) in backend().symbols().items():
+        if name == target_name:
+            continue
+        source = backend().get_function(name)
+        if not source:
+            continue
+        pool.append(Candidate(
+            name=name, file=str(path), line=int(line) if line else 0,
+            source=source, tokens=count_tokens(source),
+        ))
+    return pool
+
+
+def target_line(sample):
+    """The target function's definition line in the indexed repo, or None."""
+    name = guess_function_name(sample.func_body)
+    entry = backend().symbols().get(name)
+    return int(entry[1]) if entry and entry[1] else None
 
 
 def enforce_budget(candidates, budget):
