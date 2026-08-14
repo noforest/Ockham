@@ -2,11 +2,43 @@
 
 Every selector ranks the same pool under the same token budget, so a difference in
 results is attributable to the selector and not to the pool it drew from.
+
+The backend is an experimental variable, not a fidelity choice. Selecting one swaps
+the whole program-query layer -- symbols, call edges, enclosing conditions -- so a
+cell can be run twice and the gap between the two measured.
 """
 
+import importlib
 import re
 
 _FUNC_NAME_RE = re.compile(r"([A-Za-z_]\w*)\s*\(")
+
+BACKENDS = ("ts", "joern")
+
+_backend_name = "ts"
+_BACKEND = None
+
+
+def set_backend(which):
+    """Select the backend every later query goes through."""
+    global _backend_name, _BACKEND
+    if which not in BACKENDS:
+        raise ValueError(f"unknown backend {which!r}, expected one of {list(BACKENDS)}")
+    _backend_name = which
+    _BACKEND = None
+    return backend()
+
+
+def backend():
+    """The backend module currently selected."""
+    global _BACKEND
+    if _BACKEND is None:
+        _BACKEND = importlib.import_module(f".backend_{_backend_name}", __package__)
+    return _BACKEND
+
+
+def backend_name():
+    return _backend_name
 
 
 def count_tokens(text):
