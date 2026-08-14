@@ -26,15 +26,18 @@ def guess_function_name(body):
 
 
 def enforce_budget(candidates, budget):
-    """Keep candidates, in the given order, while their source tokens fit the budget.
+    """Greedily fill the budget with candidates, in the given order.
 
-    A candidate larger than the whole budget is skipped rather than truncated:
-    truncating a body would change the representation, not just the selection.
+    A fill, not a prefix cut: the loop goes past a candidate that does not fit, so a
+    small low-ranked one can still enter after a large higher-ranked one was skipped.
+    Leaving budget unspent would understate every selector. A candidate larger than
+    the whole budget is skipped rather than truncated, which would change the
+    representation and not just the selection.
     """
     kept, used = [], 0
     for c in candidates:
         if used + c.tokens > budget:
-            break
+            continue
         kept.append(c)
         used += c.tokens
     return kept
