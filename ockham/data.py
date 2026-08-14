@@ -1,7 +1,7 @@
 """Loading the pair dataset.
 
 One JSONL line is a minimal pair: the same function before and after its fix. Each
-line becomes two Samples sharing an `idx`, the key every pairwise metric groups on.
+line becomes two Samples sharing an idx, the key every pairwise metric groups on.
 """
 
 import json
@@ -40,7 +40,7 @@ def load_pairs(path, commit_mode="parent-of-fix"):
     """Read the dataset and explode every pair into its two halves.
 
     commit_mode "vul-intro" puts the vulnerable half on the introducing commit
-    instead of the parent of the fix. Ablation only.
+    instead of the parent of the fix.
     """
     with open(path, encoding="utf-8") as f:
         raw = [json.loads(line) for line in f]
