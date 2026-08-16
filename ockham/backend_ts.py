@@ -47,7 +47,7 @@ def index(repo_dir):
     _symbols = {}
     _trees = {}
     for name, path, line in _run_ctags(repo_dir):
-        _symbols[name] = (Path(path), line)
+        _symbols.setdefault(name, (Path(path), line))   # first definition wins
     return len(_symbols)
 
 
