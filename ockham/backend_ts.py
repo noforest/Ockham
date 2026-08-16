@@ -89,18 +89,36 @@ def _func_name(fd):
     return name.text.decode("utf-8", "ignore") if name is not None else None
 
 
+def _line_start_col(src, row):
+    """0-indexed column of the first non-whitespace byte on a 0-indexed row."""
+    lines = src.split(b"\n")
+    if row >= len(lines):
+        return 0
+    text = lines[row]
+    return len(text) - len(text.lstrip())
+
+
 def _func_node(name):
-    """The function_definition node a symbol resolves to, or None."""
+    """The function_definition node a symbol resolves to, or None.
+
+    Descends to the ctags line and climbs back up. A function wrapped in #ifdef,
+    extern "C" or a namespace is not a direct child of the translation unit, so
+    scanning the root's children misses it while ctags resolves it fine.
+    """
     entry = _symbols.get(name)
     if entry is None:
         return None
-    path, _line = entry
+    path, line = entry
     if not path.exists():
         return None
-    _src, root = _tree(path)
-    for node in root.children:
-        if node.type == "function_definition" and _func_name(node) == name:
-            return node
+    src, root = _tree(path)
+    row = line - 1
+    col = _line_start_col(src, row)
+    node = root.descendant_for_point_range((row, col), (row, col))
+    while node is not None and node.type != "function_definition":
+        node = node.parent
+    if node is not None and _func_name(node) == name:
+        return node
     return None
 
 
