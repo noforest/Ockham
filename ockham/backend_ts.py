@@ -75,3 +75,36 @@ def _find(node, type_):
         if hit is not None:
             return hit
     return None
+
+
+def _func_name(fd):
+    """Name identifier of a function_definition node, or None."""
+    decl = _find(fd, "function_declarator")
+    if decl is None:
+        return None
+    name = decl.child_by_field_name("declarator")
+    while name is not None and name.type not in ("identifier", "field_identifier"):
+        inner = name.child_by_field_name("declarator")
+        name = inner if inner is not None else (name.children[0] if name.children else None)
+    return name.text.decode("utf-8", "ignore") if name is not None else None
+
+
+def _func_node(name):
+    """The function_definition node a symbol resolves to, or None."""
+    entry = _symbols.get(name)
+    if entry is None:
+        return None
+    path, _line = entry
+    if not path.exists():
+        return None
+    _src, root = _tree(path)
+    for node in root.children:
+        if node.type == "function_definition" and _func_name(node) == name:
+            return node
+    return None
+
+
+def get_function(name):
+    """Source of an indexed function, or None if this backend cannot locate it."""
+    node = _func_node(name)
+    return node.text.decode("utf-8", "ignore") if node is not None else None
