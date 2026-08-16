@@ -6,9 +6,14 @@ Module-level state, reset by each index() call -- one checkout at a time.
 
 import tree_sitter as ts
 import tree_sitter_c
+import tree_sitter_cpp
 
 _C = ts.Language(tree_sitter_c.language())
+_CPP = ts.Language(tree_sitter_cpp.language())
 _PARSER_C = ts.Parser(_C)
+_PARSER_CPP = ts.Parser(_CPP)
+
+_CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"}
 
 _trees = {}     # Path -> (source bytes, root node)
 
@@ -17,7 +22,8 @@ def _tree(path):
     """Parse a file once and keep its root node."""
     if path not in _trees:
         src = path.read_bytes()
-        _trees[path] = (src, _PARSER_C.parse(src).root_node)
+        parser = _PARSER_CPP if path.suffix in _CPP_SUFFIXES else _PARSER_C
+        _trees[path] = (src, parser.parse(src).root_node)
     return _trees[path]
 
 
