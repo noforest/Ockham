@@ -84,7 +84,12 @@ def _func_name(fd):
         return None
     name = decl.child_by_field_name("declarator")
     while name is not None and name.type not in ("identifier", "field_identifier"):
-        inner = name.child_by_field_name("declarator")
+        if name.type == "qualified_identifier":
+            # C++ Class::method: the name is in the 'name' field. The leftmost child is
+            # the class or namespace scope, which would return the wrong identifier.
+            inner = name.child_by_field_name("name")
+        else:
+            inner = name.child_by_field_name("declarator")
         name = inner if inner is not None else (name.children[0] if name.children else None)
     return name.text.decode("utf-8", "ignore") if name is not None else None
 
