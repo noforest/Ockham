@@ -11,10 +11,11 @@ from .. import candidates as C
 
 SEED = 0
 
-_rng = random.Random(SEED)
-
 
 def select(target, candidates, budget):
+    # Seeded per target, so the draw is fixed for a given sample and independent of the
+    # order the cell happens to visit samples in.
+    rng = random.Random(f"{SEED}-{target.sample_id}")
     shuffled = list(candidates)
-    _rng.shuffle(shuffled)
+    rng.shuffle(shuffled)
     return C.enforce_budget(shuffled, budget)
