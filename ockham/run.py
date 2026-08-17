@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Optional
 
 from . import candidates as C
+from . import samples as S
 from .data import checkout, load_pairs
 from .representation import r0_raw
 from .selection import c0_target_only, c1_same_file, c2_random
@@ -123,18 +124,19 @@ class CellConfig:
 
 
 def resolve_samples(cfg):
-    """The sample set for this cell."""
+    """The sample set for this cell, and its id."""
     path = Path(cfg.data)
     if not path.exists():
         raise SystemExit(f"no pair file at {path}. See the README for the expected format, "
                          f"or pass --data.")
     all_samples = load_pairs(path)
     if cfg.subsample:
-        from .data import stratified_subsample
-        return stratified_subsample(all_samples, n_pairs=cfg.subsample, seed=cfg.seed)
-    if cfg.limit:
-        return all_samples[: cfg.limit]
-    return all_samples
+        chosen = S.draw(all_samples, n_pairs=cfg.subsample, seed=cfg.seed)
+    elif cfg.limit:
+        chosen = all_samples[: cfg.limit]
+    else:
+        chosen = all_samples
+    return chosen, S.sample_set_id([s.sample_id for s in chosen])
 
 
 def run_cell(cfg):
@@ -144,7 +146,7 @@ def run_cell(cfg):
     needs_pool = cfg.selector in NEEDS_POOL
     C.set_backend(cfg.backend)
 
-    samples = resolve_samples(cfg)
+    samples, set_id = resolve_samples(cfg)
     out_dir = Path(cfg.out_dir) if cfg.out_dir else ROOT / "results"
     out_dir.mkdir(parents=True, exist_ok=True)
     run_id = f"{cfg.cell_id()}_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -165,7 +167,7 @@ def run_cell(cfg):
                 "sample_id": sample.sample_id, "pair_id": sample.pair_id, "cve": sample.cve,
                 "cwe": sample.cwe, "project": sample.project, "commit": sample.commit,
                 "label": sample.label,
-                "run_id": run_id, "selector": cfg.selector,
+                "run_id": run_id, "sample_set_id": set_id, "selector": cfg.selector,
                 "representation": cfg.representation, "encoding": "text",
                 "budget": cfg.budget, "backend": cfg.backend, "seed": cfg.seed,
                 "target_tokens": C.count_tokens(sample.func_body),
@@ -174,7 +176,7 @@ def run_cell(cfg):
             out.write(json.dumps(record) + "\n")
             out.flush()
 
-    print(f"[run] {total} rows ({cfg.cell_id()}) -> {out_path}", flush=True)
+    print(f"[run] {total} rows ({cfg.cell_id()}, set {set_id}) -> {out_path}", flush=True)
     return out_path
 
 
