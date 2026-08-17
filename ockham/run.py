@@ -116,6 +116,7 @@ class CellConfig:
     subsample: Optional[int] = None
     sample_set: Optional[str] = None       # reuse a frozen set from this path
     freeze_samples: Optional[str] = None   # draw once and write the set to this path
+    freeze_only: bool = False              # write that set and stop, running no cell
     show_pack: bool = False
     out_dir: Optional[Path] = None
 
@@ -156,6 +157,8 @@ def run_cell(cfg):
     C.set_backend(cfg.backend)
 
     samples, set_id = resolve_samples(cfg)
+    if cfg.freeze_only:
+        return None
     out_dir = Path(cfg.out_dir) if cfg.out_dir else ROOT / "results"
     out_dir.mkdir(parents=True, exist_ok=True)
     run_id = f"{cfg.cell_id()}_{time.strftime('%Y%m%d_%H%M%S')}"
@@ -205,15 +208,20 @@ def main():
                     help="reuse a frozen sample set (overrides --limit/--subsample)")
     ap.add_argument("--freeze-samples", default=None,
                     help="write the drawn set to this path for later cells to reuse")
+    ap.add_argument("--freeze-only", action="store_true",
+                    help="with --freeze-samples: write the set and stop, running no cell")
     ap.add_argument("--out-dir", default=None)
     ap.add_argument("--show-pack", action="store_true")
     args = ap.parse_args()
+    if args.freeze_only and not args.freeze_samples:
+        ap.error("--freeze-only needs --freeze-samples to say where to write the set")
 
     run_cell(CellConfig(
         selector=args.selector, representation=args.representation, budget=args.budget,
         backend=args.backend, data=args.data, seed=args.seed, limit=args.limit,
         subsample=args.subsample, sample_set=args.sample_set,
-        freeze_samples=args.freeze_samples, show_pack=args.show_pack, out_dir=args.out_dir,
+        freeze_samples=args.freeze_samples, freeze_only=args.freeze_only,
+        show_pack=args.show_pack, out_dir=args.out_dir,
     ))
 
 
