@@ -114,6 +114,8 @@ class CellConfig:
     seed: int = 0
     limit: Optional[int] = None
     subsample: Optional[int] = None
+    sample_set: Optional[str] = None       # reuse a frozen set from this path
+    freeze_samples: Optional[str] = None   # draw once and write the set to this path
     show_pack: bool = False
     out_dir: Optional[Path] = None
 
@@ -130,13 +132,20 @@ def resolve_samples(cfg):
         raise SystemExit(f"no pair file at {path}. See the README for the expected format, "
                          f"or pass --data.")
     all_samples = load_pairs(path)
+    if cfg.sample_set:
+        payload = S.load(cfg.sample_set, path)
+        return S.apply(all_samples, payload["sample_ids"]), payload["sample_set_id"]
+
     if cfg.subsample:
         chosen = S.draw(all_samples, n_pairs=cfg.subsample, seed=cfg.seed)
     elif cfg.limit:
         chosen = all_samples[: cfg.limit]
     else:
         chosen = all_samples
-    return chosen, S.sample_set_id([s.sample_id for s in chosen])
+    ids = [s.sample_id for s in chosen]
+    if cfg.freeze_samples:
+        S.save(cfg.freeze_samples, ids, cfg.seed, path)
+    return chosen, S.sample_set_id(ids)
 
 
 def run_cell(cfg):
@@ -192,6 +201,10 @@ def main():
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--subsample", type=int, default=None,
                     help="stratified subsample of N pairs by project and cwe")
+    ap.add_argument("--sample-set", default=None,
+                    help="reuse a frozen sample set (overrides --limit/--subsample)")
+    ap.add_argument("--freeze-samples", default=None,
+                    help="write the drawn set to this path for later cells to reuse")
     ap.add_argument("--out-dir", default=None)
     ap.add_argument("--show-pack", action="store_true")
     args = ap.parse_args()
@@ -199,7 +212,8 @@ def main():
     run_cell(CellConfig(
         selector=args.selector, representation=args.representation, budget=args.budget,
         backend=args.backend, data=args.data, seed=args.seed, limit=args.limit,
-        subsample=args.subsample, show_pack=args.show_pack, out_dir=args.out_dir,
+        subsample=args.subsample, sample_set=args.sample_set,
+        freeze_samples=args.freeze_samples, show_pack=args.show_pack, out_dir=args.out_dir,
     ))
 
 
