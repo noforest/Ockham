@@ -40,6 +40,22 @@ DATA = ROOT / "data" / "pairs.jsonl"
 WORKSPACE = ROOT / "workspace"
 
 
+def _select_within_budget(selector_fn, sample, pool, budget):
+    """Run the selector, then hold it to the budget here.
+
+    Calling enforce_budget is a convention selectors are asked to follow; nothing stopped
+    one from overshooting, and "the same budget for every cell" is what the comparison
+    rests on. Checking at this level makes it true for any selector added later.
+    """
+    selected = selector_fn(sample, pool, budget)
+    used = sum(c.tokens for c in selected)
+    if used > budget:
+        selected = C.enforce_budget(selected, budget)
+        print(f"[warn] selector overshot budget ({used} > {budget}), clamped to "
+              f"{sum(c.tokens for c in selected)}", flush=True)
+    return selected
+
+
 def build_pack(sample, selector_fn, represent_fn, needs_pool, budget):
     """Pack text plus the ledger fields for one sample."""
     target = sample.func_body.strip()
@@ -65,7 +81,7 @@ def build_pack(sample, selector_fn, represent_fn, needs_pool, budget):
 
     pool = C.build_candidate_pool(sample, wt)
     t_warm = time.time()
-    selected = selector_fn(sample, pool, budget)
+    selected = _select_within_budget(selector_fn, sample, pool, budget)
     pack_text = represent_fn(target, selected)
     warm_ms = (time.time() - t_warm) * 1000
     return _ledger(pack_text, selected, len(pool), index_s,
