@@ -11,6 +11,7 @@ resumable. Nothing else carries state.
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -43,14 +44,16 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--model", default="google/gemma-3n-e4b-it")
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
-    ap.add_argument("--api-key", default=None)
+    ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
     ap.add_argument("--no-llm", action="store_true")
+    ap.add_argument("--sample-set", default=None,
+                    help="reuse a frozen set; defaults to one inside --out-dir")
     ap.add_argument("--out-dir", default=None)
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir) if args.out_dir else ROOT / "results" / f"exp{args.phase}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    sample_set = out_dir / "sample_set.json"
+    sample_set = Path(args.sample_set) if args.sample_set else out_dir / "sample_set.json"
     freeze_once(sample_set, args.data, args.subsample, args.seed)
 
     summary = []
