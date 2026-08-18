@@ -15,6 +15,7 @@ checked afterwards instead of being assumed.
 
 import argparse
 import json
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,19 +23,22 @@ from typing import Optional
 
 from . import candidates as C
 from . import samples as S
+from . import solver
 from .data import checkout, load_pairs
+from .metrics import compute_metrics, load_results
 from .representation import r0_raw
-from .selection import c0_target_only, c1_same_file, c2_random
+from .selection import c0_target_only, c1_same_file, c2_random, s1_bm25
 
 SELECTORS = {
     "C0": c0_target_only.select,
     "C1": c1_same_file.select,
     "C2": c2_random.select,
+    "S1": s1_bm25.select,
 }
 REPRESENTATIONS = {"R0": r0_raw.render}
 
 # Selectors that draw from the repository pool, and so need a checkout and an index.
-NEEDS_POOL = {"C1", "C2"}
+NEEDS_POOL = {"C1", "C2", "S1"}
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "pairs.jsonl"
@@ -111,6 +115,10 @@ class CellConfig:
     budget: int = 2000
     backend: str = "ts"
     data: Path = DATA
+    model: str = "google/gemma-3n-e4b-it"
+    base_url: str = "http://localhost:11434/v1"
+    api_key: Optional[str] = None
+    no_llm: bool = False
     seed: int = 0
     limit: Optional[int] = None
     subsample: Optional[int] = None
@@ -170,10 +178,21 @@ def run_cell(cfg):
             pack = build_pack(sample, selector_fn, represent_fn, needs_pool, cfg.budget)
             if cfg.show_pack:
                 print(f"\n----- {sample.sample_id} -----\n{pack['pack_text']}")
+            if cfg.no_llm:
+                prediction, raw, llm_s = -1, "[no-llm]", 0.0
+            else:
+                t_llm = time.time()
+                prediction, raw = solver.predict(pack["pack_text"], cfg.model,
+                                                 cfg.base_url, cfg.api_key, seed=cfg.seed)
+                llm_s = time.time() - t_llm
+
+            pred_str = {1: "VULN", 0: "SAFE", -1: "??"}[prediction]
+            mark = "??" if prediction == -1 else ("OK" if prediction == sample.label else "FAIL")
             fail = " backend_failure" if pack["n_backend_failures"] else ""
             print(f"[{done}/{total}] {sample.sample_id} ({sample.project}) | {cfg.cell_id()} "
                   f"pool={pack['n_candidates_pool']} sel={pack['n_candidates_selected']} "
-                  f"tokens={pack['pack_tokens']}{fail}", flush=True)
+                  f"tokens={pack['pack_tokens']} | pred={pred_str} "
+                  f"label={'VULN' if sample.label else 'SAFE'} [{mark}]{fail}", flush=True)
 
             record = {
                 "sample_id": sample.sample_id, "pair_id": sample.pair_id, "cve": sample.cve,
@@ -182,14 +201,25 @@ def run_cell(cfg):
                 "run_id": run_id, "sample_set_id": set_id, "selector": cfg.selector,
                 "representation": cfg.representation, "encoding": "text",
                 "budget": cfg.budget, "backend": cfg.backend, "seed": cfg.seed,
+                "model": cfg.model, "base_url": cfg.base_url,
+                "prediction": prediction, "model_output_raw": raw, "llm_time_s": llm_s,
                 "target_tokens": C.count_tokens(sample.func_body),
+                "prompt_tokens_total": C.count_tokens(solver.SYSTEM_PROMPT) + pack["pack_tokens"],
                 **{k: v for k, v in pack.items() if k != "pack_text"},
             }
             out.write(json.dumps(record) + "\n")
             out.flush()
 
     print(f"[run] {total} rows ({cfg.cell_id()}, set {set_id}) -> {out_path}", flush=True)
-    return out_path
+
+    metrics = compute_metrics(load_results(out_path))
+    metrics_path = out_dir / f"metrics_{run_id}.json"
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2, default=float)
+    for k, v in metrics.items():
+        print(f"[metrics] {k}: {v}", flush=True)
+    print(f"[metrics] -> {metrics_path}", flush=True)
+    return out_path, metrics
 
 
 def main():
@@ -200,6 +230,11 @@ def main():
                     help="symbol backend, held constant within a phase")
     ap.add_argument("--budget", type=int, default=2000, help="token budget for the evidence")
     ap.add_argument("--data", default=str(DATA))
+    ap.add_argument("--model", default="google/gemma-3n-e4b-it")
+    ap.add_argument("--base-url", default="http://localhost:11434/v1")
+    ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
+    ap.add_argument("--no-llm", action="store_true",
+                    help="skip the detection call: prediction = -1 on every row")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--subsample", type=int, default=None,
@@ -218,7 +253,8 @@ def main():
 
     run_cell(CellConfig(
         selector=args.selector, representation=args.representation, budget=args.budget,
-        backend=args.backend, data=args.data, seed=args.seed, limit=args.limit,
+        backend=args.backend, data=args.data, model=args.model, base_url=args.base_url,
+        api_key=args.api_key, no_llm=args.no_llm, seed=args.seed, limit=args.limit,
         subsample=args.subsample, sample_set=args.sample_set,
         freeze_samples=args.freeze_samples, freeze_only=args.freeze_only,
         show_pack=args.show_pack, out_dir=args.out_dir,
