@@ -41,7 +41,9 @@ def rank(target, candidates):
     if not query or not any(corpus):
         return list(candidates)
     scores = BM25Okapi(corpus).get_scores(query)
-    order = sorted(range(len(candidates)), key=lambda i: -scores[i])
+    # Name breaks ties. Many candidates share a score exactly, and a stable sort would
+    # then echo the pool order, which is the backend's traversal order.
+    order = sorted(range(len(candidates)), key=lambda i: (-scores[i], candidates[i].name))
     return [candidates[i] for i in order]
 
 
