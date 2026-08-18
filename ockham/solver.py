@@ -34,15 +34,22 @@ def _get_client(base_url, api_key):
 
 
 def extract_verdict(text):
-    """1 for vulnerable, 0 for safe, read from the first word of the reply."""
+    """1 vulnerable, 0 safe, -1 unreadable, from the first word of the reply.
+
+    An unreadable reply is never coerced to SAFE. It is a distinct outcome, counted on
+    its own; folded into SAFE it would improve or damage a cell's score depending on
+    the labels it happened to land on.
+    """
     head = text.lstrip()[:12].strip().upper()
     if head.startswith("V"):
         return 1
-    return 0
+    if head.startswith("S"):
+        return 0
+    return -1
 
 
 def predict(pack_text, model, base_url, api_key=None, max_tokens=256, seed=None):
-    """Returns (prediction, raw reply).
+    """Returns (prediction in {1, 0, -1}, raw reply).
 
     `seed` is forwarded when the endpoint accepts one; with temperature 0 it is what
     keeps decoding constant across the cells of a phase. Endpoints that ignore the
@@ -58,6 +65,6 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=256, seed=None)
             temperature=0, max_tokens=max_tokens, **kwargs,
         )
     except APIError as e:
-        return 0, f"[api_error] {e}"
+        return -1, f"[api_error] {e}"
     raw = response.choices[0].message.content or ""
     return extract_verdict(raw), raw
