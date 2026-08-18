@@ -14,8 +14,7 @@ SYSTEM_PROMPT = (
     "\n"
     "Answer with a single word as the VERY FIRST token of your reply: "
     "VULNERABLE or SAFE. Output that word first, with no preamble, no punctuation "
-    "before it, and nothing else on that line. You may add a brief justification on "
-    "the following lines."
+    "before it, and nothing else. Do not explain."
 )
 
 REQUEST_TIMEOUT_S = 120
@@ -48,8 +47,12 @@ def extract_verdict(text):
     return -1
 
 
-def predict(pack_text, model, base_url, api_key=None, max_tokens=256, seed=None):
+def predict(pack_text, model, base_url, api_key=None, max_tokens=16, seed=None):
     """Returns (prediction in {1, 0, -1}, raw reply).
+
+    Only the first word is read, so the reply is capped short: a justification we never
+    look at is most of the generation time, and on a thinking model it consumes the whole
+    budget before any verdict is emitted.
 
     `seed` is forwarded when the endpoint accepts one; with temperature 0 it is what
     keeps decoding constant across the cells of a phase. Endpoints that ignore the
