@@ -6,16 +6,22 @@ parse of that word rather than of free prose.
 
 from openai import APIError, OpenAI
 
+# The balanced prior is stated on purpose: without it a small model answers VULNERABLE
+# to everything. It is true of this arm only, and has to be dropped on an imbalanced set.
 SYSTEM_PROMPT = (
-    "You are a security auditor deciding whether a C/C++ function is vulnerable, "
-    "using its calling context if provided.\n"
+    "Decide whether a C/C++ function contains a vulnerability.\n"
     "The pack has a TARGET FUNCTION (the function to judge) and optionally a CONTEXT "
     "section with selected supporting evidence.\n"
+    "\n"
+    "About half of the functions you are shown are not vulnerable. Answer VULNERABLE "
+    "only if you can point to a concrete defect in the target function; answer SAFE "
+    "otherwise, including when the code merely looks risky.\n"
     "\n"
     "Answer with a single word as the VERY FIRST token of your reply: "
     "VULNERABLE or SAFE. Output that word first, with no preamble, no punctuation "
     "before it, and nothing else. Do not explain."
 )
+
 
 REQUEST_TIMEOUT_S = 120
 
