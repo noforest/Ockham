@@ -33,20 +33,28 @@ def _pairwise(df):
 
     P-C both halves right, P-V both called vulnerable, P-B both called benign,
     P-R both wrong the other way round.
+
+    A pair is counted only when both halves were read. One holding an unreadable reply
+    matches no bucket, so leaving it in the denominator would deflate pAcc by an amount
+    that has nothing to do with detection. Dropped pairs are returned rather than
+    discarded silently.
     """
     counts = {"P-C": 0, "P-V": 0, "P-B": 0, "P-R": 0}
     n_pairs = 0
+    n_dropped = 0
     outcome = {(1, 0): "P-C", (1, 1): "P-V", (0, 0): "P-B", (0, 1): "P-R"}
     for _, group in df.groupby("pair_id"):
         vuln = group[group.label == 1]
         benign = group[group.label == 0]
         if len(vuln) != 1 or len(benign) != 1:
             continue
-        n_pairs += 1
         key = outcome.get((vuln.iloc[0].prediction, benign.iloc[0].prediction))
-        if key is not None:
-            counts[key] += 1
-    return counts, n_pairs
+        if key is None:
+            n_dropped += 1
+            continue
+        n_pairs += 1
+        counts[key] += 1
+    return counts, n_pairs, n_dropped
 
 
 def compute_metrics(df):
@@ -56,11 +64,12 @@ def compute_metrics(df):
     has = len(parsed) > 0
     y_true, y_pred = (parsed.label, parsed.prediction) if has else ([], [])
 
-    counts, n_pairs = _pairwise(clean)
+    counts, n_pairs, n_pairs_dropped = _pairwise(clean)
     out = {
         "n_samples": len(df),
         "n_samples_excluding_backend_failures": len(clean),
         "n_pairs": n_pairs,
+        "n_pairs_dropped_unparsable": n_pairs_dropped,
         "pAcc": counts["P-C"] / n_pairs if n_pairs else nan,
         **counts,
         "MCC": float(matthews_corrcoef(y_true, y_pred)) if has else nan,
