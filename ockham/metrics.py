@@ -1,7 +1,5 @@
 """Detection metrics, read back from the per-sample JSONL.
 
-Never depends on a dataset format: it reads rows, not pairs files.
-
 pAcc is the primary measure, paired by pair_id, with its P-C/P-V/P-B/P-R breakdown.
 F1 is always printed next to F1_trivial, the always-vulnerable classifier on the same
 distribution: on a balanced set that is 66.7 %, and any F1 below it is worthless.
@@ -102,11 +100,7 @@ def cell_key(df):
 
 
 def load_cells(results_dir, pattern="results_*.jsonl"):
-    """Every results file in a directory as {cell_id: (metrics, df, path)}.
-
-    Later files win on an identical cell id, so a rerun supersedes the earlier attempt
-    rather than being averaged into it.
-    """
+    """Every results file in a directory as {cell_id: (metrics, df, path)}."""
     cells = {}
     for path in sorted(Path(results_dir).glob(pattern)):
         try:

@@ -69,7 +69,7 @@ def ensure_indexed(repo_dir):
     """Index a checkout unless the current backend has already indexed it.
 
     Returns (index_time_s, n_symbols). A count of 0 means the backend failed on this
-    repository -- a parser timeout is a result to record, not an empty repository.
+    repository.
     Only the first build of a worktree is timed, so a later re-index does not inflate
     the reported cost.
     """
@@ -121,14 +121,7 @@ def target_line(sample):
 
 
 def enforce_budget(candidates, budget):
-    """Greedily fill the budget with candidates, in the given order.
-
-    A fill, not a prefix cut: the loop goes past a candidate that does not fit, so a
-    small low-ranked one can still enter after a large higher-ranked one was skipped.
-    Leaving budget unspent would understate every selector. A candidate larger than
-    the whole budget is skipped rather than truncated, which would change the
-    representation and not just the selection.
-    """
+    """Greedily fill the budget with candidates, in the given order."""
     kept, used = [], 0
     for c in candidates:
         if used + c.tokens > budget:
