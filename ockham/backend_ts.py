@@ -160,14 +160,20 @@ def _condition_text(ctrl):
 
 
 def _enclosing_conditions(call, stop):
-    """Conditions of the control structures between a call and its function, outermost first."""
+    """Conditions of the control structures between a call and its function, outermost first.
+
+    A call sitting inside a structure's own condition -- `if (strcmp(a, b) == 0)` -- is not
+    guarded by that condition, it is the test. Skipped rather than reported.
+    """
     conds = []
+    prev = call
     node = call.parent
     while node is not None and node is not stop:
         if node.type in _CONTROL:
             text = _condition_text(node)
-            if text:
+            if text and prev is not node.child_by_field_name("condition"):
                 conds.append(text)
+        prev = node
         node = node.parent
     conds.reverse()
     return conds
