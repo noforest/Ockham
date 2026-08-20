@@ -12,15 +12,28 @@ import tree_sitter as ts
 import tree_sitter_c
 import tree_sitter_cpp
 
+from .abstraction import CallSite
+
 _C = ts.Language(tree_sitter_c.language())
 _CPP = ts.Language(tree_sitter_cpp.language())
 _PARSER_C = ts.Parser(_C)
 _PARSER_CPP = ts.Parser(_CPP)
 
 _CPP_SUFFIXES = {".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"}
+_CONTROL = {"if_statement", "while_statement", "for_statement", "switch_statement",
+            "do_statement"}
+_IDENTIFIER_TYPES = {"identifier", "field_identifier", "type_identifier"}
+
+# Node types R1 keeps: what a function declares, branches on, calls and returns. The
+# head line only -- keeping an if_statement entire would keep its body with it, and R1
+# would stop being a reduction.
+_KEEP = {"declaration", "if_statement", "while_statement", "for_statement",
+         "switch_statement", "do_statement", "return_statement", "goto_statement",
+         "case_statement", "labeled_statement", "call_expression"}
 
 _symbols = {}   # name -> (Path, line)
 _trees = {}     # Path -> (source bytes, root node)
+_walked = {}    # name -> (calls, identifiers, keep_lines)
 
 
 def _run_ctags(repo_dir):
@@ -131,3 +144,90 @@ def get_function(name):
     """Source of an indexed function, or None if this backend cannot locate it."""
     node = _func_node(name)
     return node.text.decode("utf-8", "ignore") if node is not None else None
+
+
+def _condition_text(ctrl):
+    """The condition of a control structure, whitespace-collapsed and unparenthesised."""
+    cond = ctrl.child_by_field_name("condition")
+    if cond is None:
+        return None
+    text = " ".join(cond.text.decode("utf-8", "ignore").split())
+    if text.startswith("(") and text.endswith(")"):
+        text = text[1:-1].strip()
+    return text or None
+
+
+def _enclosing_conditions(call, stop):
+    """Conditions of the control structures between a call and its function, outermost first."""
+    conds = []
+    node = call.parent
+    while node is not None and node is not stop:
+        if node.type in _CONTROL:
+            text = _condition_text(node)
+            if text:
+                conds.append(text)
+        node = node.parent
+    conds.reverse()
+    return conds
+
+
+def _collect_calls(node, fn_node, out):
+    """Append a CallSite for every call in the subtree."""
+    if node.type == "call_expression":
+        fn = node.child_by_field_name("function")
+        if fn is not None and fn.type in ("identifier", "field_identifier"):
+            out.append(CallSite(
+                name=fn.text.decode("utf-8", "ignore"),
+                conditions=_enclosing_conditions(node, fn_node),
+            ))
+    for child in node.children:
+        _collect_calls(child, fn_node, out)
+
+
+def _walk_node(fn_node):
+    """(calls, identifiers, keep_lines) for one function_definition node.
+
+    keep_lines rows are 0-indexed from the start of the function, so a caller can index
+    into the source this backend returned without knowing where in the file it came from.
+    """
+    calls = []
+    _collect_calls(fn_node, fn_node, calls)
+
+    base = fn_node.start_point[0]
+    idents, rows = set(), set()
+    stack = [fn_node]
+    while stack:
+        n = stack.pop()
+        if n.type in _IDENTIFIER_TYPES:
+            idents.add(n.text.decode("utf-8", "ignore"))
+        if n.type in _KEEP:
+            rows.add(n.start_point[0] - base)
+        stack.extend(n.children)
+    return calls, frozenset(idents), frozenset(rows)
+
+
+def _analyzed(name):
+    """Memoised walk of an indexed function, or None if this backend cannot locate it.
+
+    S4 asks the whole pool whether it calls a given name, once per sample, so the same
+    bodies are walked over and over within a checkout.
+    """
+    if name not in _walked:
+        node = _func_node(name)
+        _walked[name] = None if node is None else _walk_node(node)
+    return _walked[name]
+
+
+def get_calls(name):
+    hit = _analyzed(name)
+    return None if hit is None else hit[0]
+
+
+def identifiers(name):
+    hit = _analyzed(name)
+    return None if hit is None else hit[1]
+
+
+def keep_lines(name):
+    hit = _analyzed(name)
+    return None if hit is None else hit[2]
