@@ -168,21 +168,24 @@ def _enclosing_conditions(call, stop):
     - a call reached through an else branch runs when the condition is FALSE, so the
       condition is reported negated.
     """
+    # tree-sitter hands back a fresh Python object on every .parent or .child_by_field_name,
+    # so `is` is never true for two accesses to the same tree position. Compare with ==
+    # everywhere below, except against None where `is` is the right test.
     conds = []
     prev = call
     node = call.parent
-    while node is not None and node is not stop:
+    while node is not None and node != stop:
         if node.type in _CONTROL:
             text = _condition_text(node)
             body = node.child_by_field_name("consequence") or node.child_by_field_name("body")
             alt = node.child_by_field_name("alternative")
             if not text:
                 pass
-            elif prev is node.child_by_field_name("condition"):
+            elif prev == node.child_by_field_name("condition"):
                 pass
-            elif alt is not None and prev is alt:
+            elif alt is not None and prev == alt:
                 conds.append(f"!({text})")
-            elif prev is body:
+            elif prev == body:
                 conds.append(text)
         prev = node
         node = node.parent
