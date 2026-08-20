@@ -162,8 +162,11 @@ def _condition_text(ctrl):
 def _enclosing_conditions(call, stop):
     """Conditions of the control structures between a call and its function, outermost first.
 
-    A call sitting inside a structure's own condition -- `if (strcmp(a, b) == 0)` -- is not
-    guarded by that condition, it is the test. Skipped rather than reported.
+    Two cases a plain "is there an enclosing if" walk gets wrong:
+    - a call inside a structure's own condition -- `if (strcmp(a, b) == 0)` -- is not
+      guarded by it, it is the test;
+    - a call reached through an else branch runs when the condition is FALSE, so the
+      condition is reported negated.
     """
     conds = []
     prev = call
@@ -171,7 +174,15 @@ def _enclosing_conditions(call, stop):
     while node is not None and node is not stop:
         if node.type in _CONTROL:
             text = _condition_text(node)
-            if text and prev is not node.child_by_field_name("condition"):
+            body = node.child_by_field_name("consequence") or node.child_by_field_name("body")
+            alt = node.child_by_field_name("alternative")
+            if not text:
+                pass
+            elif prev is node.child_by_field_name("condition"):
+                pass
+            elif alt is not None and prev is alt:
+                conds.append(f"!({text})")
+            elif prev is body:
                 conds.append(text)
         prev = node
         node = node.parent
