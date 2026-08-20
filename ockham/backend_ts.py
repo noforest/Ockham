@@ -1,8 +1,5 @@
-"""tree-sitter + ctags backend.
-
-ctags resolves a name to (file, line); tree-sitter parses that file and walks the AST.
-Module-level state, reset by each index() call -- one checkout at a time.
-"""
+"""tree-sitter + ctags backend: ctags resolves a name to (file, line), tree-sitter
+parses that file and walks the AST. One checkout at a time, reset by index()."""
 
 import json
 import subprocess
@@ -25,9 +22,7 @@ _CONTROL = {"if_statement", "while_statement", "for_statement", "switch_statemen
             "do_statement"}
 _IDENTIFIER_TYPES = {"identifier", "field_identifier", "type_identifier"}
 
-# Node types R1 keeps: what a function declares, branches on, calls and returns. The
-# head line only -- keeping an if_statement entire would keep its body with it, and R1
-# would stop being a reduction.
+# Node types R1 keeps: the head line only, or an if would drag its whole body in.
 _KEEP = {"declaration", "if_statement", "while_statement", "for_statement",
          "switch_statement", "do_statement", "return_statement", "goto_statement",
          "case_statement", "labeled_statement", "call_expression"}
@@ -60,7 +55,7 @@ def index(repo_dir):
     global _symbols, _trees
     _symbols = {}
     _trees = {}
-    _walked.clear()   # keyed by name only, so an answer would otherwise cross checkouts
+    _walked.clear()   # keyed by name only, so answers would otherwise cross checkouts
     for name, path, line in _run_ctags(repo_dir):
         _symbols.setdefault(name, (Path(path), line))   # first definition wins
     return len(_symbols)
@@ -100,8 +95,7 @@ def _func_name(fd):
     name = decl.child_by_field_name("declarator")
     while name is not None and name.type not in ("identifier", "field_identifier"):
         if name.type == "qualified_identifier":
-            # C++ Class::method: the name is in the 'name' field. The leftmost child is
-            # the class or namespace scope, which would return the wrong identifier.
+            # C++ Class::method: the leftmost child is the scope, not the name.
             inner = name.child_by_field_name("name")
         else:
             inner = name.child_by_field_name("declarator")
@@ -119,11 +113,10 @@ def _line_start_col(src, row):
 
 
 def _func_node(name):
-    """The function_definition node a symbol resolves to, or None.
+    """The function_definition a symbol resolves to, or None.
 
-    Descends to the ctags line and climbs back up. A function wrapped in #ifdef,
-    extern "C" or a namespace is not a direct child of the translation unit, so
-    scanning the root's children misses it while ctags resolves it fine.
+    Descends to the ctags line and climbs back up: under #ifdef, extern "C" or a
+    namespace the function is not a direct child of the translation unit.
     """
     entry = _symbols.get(name)
     if entry is None:
@@ -160,17 +153,13 @@ def _condition_text(ctrl):
 
 
 def _enclosing_conditions(call, stop):
-    """Conditions of the control structures between a call and its function, outermost first.
+    """Conditions guarding a call, outermost first.
 
-    Two cases a plain "is there an enclosing if" walk gets wrong:
-    - a call inside a structure's own condition -- `if (strcmp(a, b) == 0)` -- is not
-      guarded by it, it is the test;
-    - a call reached through an else branch runs when the condition is FALSE, so the
-      condition is reported negated.
+    Which part of the structure the call sits in decides: its own condition guards
+    nothing (`if (strcmp(a, b) == 0)`), an else branch reports the condition negated.
     """
-    # tree-sitter hands back a fresh Python object on every .parent or .child_by_field_name,
-    # so `is` is never true for two accesses to the same tree position. Compare with ==
-    # everywhere below, except against None where `is` is the right test.
+    # tree-sitter rebuilds the Python object on every .parent access, so `is` is never
+    # true for two accesses to the same position. Compare with ==, except against None.
     conds = []
     prev = call
     node = call.parent
@@ -210,7 +199,7 @@ def _walk_node(fn_node):
     """(calls, identifiers, keep_lines) for one function_definition node.
 
     keep_lines rows are 0-indexed from the start of the function, so a caller can index
-    into the source this backend returned without knowing where in the file it came from.
+    straight into the source this backend returned.
     """
     calls = []
     _collect_calls(fn_node, fn_node, calls)
@@ -229,11 +218,10 @@ def _walk_node(fn_node):
 
 
 def _analyzed(name):
-    """Memoised walk of an indexed function, or None if this backend cannot locate it.
+    """Memoised walk of an indexed function, or None if it cannot be located.
 
-    S4 asks the whole pool whether it calls a given name, once per sample, so the same
-    bodies are walked over and over within a checkout. Cleared by index(): samples
-    alternate between projects, and `main` exists in most of them.
+    S4 walks the whole pool once per sample. Cleared by index(): samples alternate
+    between projects, and `main` exists in most of them.
     """
     if name not in _walked:
         node = _func_node(name)
@@ -257,14 +245,12 @@ def keep_lines(name):
 
 
 def parse_source(source, filename=None):
-    """Walk a function body given as a string. This backend never returns None.
+    """Walk a body given as a string, for a name absent from the symbol table.
 
-    Used when a name is absent from the symbol table, and by the tests, which drive both
-    stages on synthetic candidates with no repository behind them.
+    Never None: this backend can always parse. The Joern arm refuses instead.
     """
     calls, idents, rows = _walk_source(source, filename)
-    # A fresh object per call: the memo below hands out the same tuple to everyone, and a
-    # caller must not be able to mutate another caller's answer.
+    # Fresh object per call: the memo hands out the same tuple to every caller.
     return ParsedSource(calls=list(calls), identifiers=idents, keep_lines=rows)
 
 
@@ -278,11 +264,10 @@ def _walk_source(source, filename=None):
 
 
 def _source_node(source, filename=None):
-    """The function_definition of a detached body, preferring the grammar that parses it clean.
+    """The function_definition of a detached body, preferring whichever grammar parses clean.
 
-    A body is not a translation unit, but both grammars parse it as one anyway -- a C++
-    body read as C parses "successfully" while dropping the calls inside what C could not
-    make sense of. The suffix decides which to try first when the caller knows it.
+    A C++ body read as C parses "successfully" while dropping calls it could not make
+    sense of, so an error-free tree beats the first one that returns something.
     """
     src = source.encode("utf-8", "ignore")
     cpp_first = filename is not None and Path(filename).suffix in _CPP_SUFFIXES

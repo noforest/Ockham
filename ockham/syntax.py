@@ -1,18 +1,9 @@
-"""Program queries about a function, routed by name to the backend currently selected.
+"""Program queries about a function, asked BY NAME of the selected backend.
 
-What does this function call and under which conditions, which identifiers does it
-mention, which of its lines carry a construct -- every such question goes through
-`candidates.backend()`, asked by name. That is what makes --backend a real experimental
-variable: switching it switches the call graph the selectors walk, not merely where the
-pool came from.
-
-A name the backend cannot answer for falls through to parsing the source it was handed.
-A backend is free to refuse that fallback (Joern cannot parse a detached body at
-reasonable cost); the miss is then counted and the answer is empty, so one arm never
-silently borrows the other's parser.
-
-Known limit, the same in both arms: resolution is by name, so two static functions
-sharing a name collapse to whichever the symbol table kept.
+That is what makes --backend an experimental variable: switching it switches the call
+graph the selectors walk, not merely where the pool came from. A name the backend cannot
+resolve falls through to parsing the source we were handed, and a backend may refuse that
+fallback -- the miss is then counted, never answered by the other parser.
 """
 
 from . import candidates as C
@@ -33,12 +24,12 @@ def reset_symbol_misses():
     _misses.clear()
 
 
-# What the backend calls each answer, against what ParsedSource calls it.
+# Backend method -> the ParsedSource field holding the same answer.
 _FIELD = {"get_calls": "calls", "identifiers": "identifiers", "keep_lines": "keep_lines"}
 
 
 def _query(what, name, source, filename):
-    """Ask the backend about `name`, else parse `source`. None when neither can answer."""
+    """Ask the backend about `name`, else parse `source`. None if neither can answer."""
     if name:
         hit = getattr(C.backend(), what)(name)
         if hit is not None:
@@ -52,7 +43,7 @@ def _query(what, name, source, filename):
 
 
 def calls(name, source=None, filename=None):
-    """[CallSite] for the body, each with its enclosing conditions outermost first."""
+    """[CallSite], each carrying its guarding conditions outermost first."""
     hit = _query("get_calls", name, source, filename)
     return list(hit) if hit is not None else []
 
@@ -69,6 +60,6 @@ def identifiers(name, source=None, filename=None):
 
 
 def keep_lines(name, source=None, filename=None):
-    """Rows carrying a construct worth keeping, 0-indexed from the start of the body."""
+    """Rows R1 keeps, 0-indexed from the start of the body."""
     hit = _query("keep_lines", name, source, filename)
     return hit if hit is not None else frozenset()
