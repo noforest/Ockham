@@ -59,6 +59,7 @@ def index(repo_dir):
     global _symbols, _trees
     _symbols = {}
     _trees = {}
+    _walked.clear()   # keyed by name only, so an answer would otherwise cross checkouts
     for name, path, line in _run_ctags(repo_dir):
         _symbols.setdefault(name, (Path(path), line))   # first definition wins
     return len(_symbols)
@@ -210,7 +211,8 @@ def _analyzed(name):
     """Memoised walk of an indexed function, or None if this backend cannot locate it.
 
     S4 asks the whole pool whether it calls a given name, once per sample, so the same
-    bodies are walked over and over within a checkout.
+    bodies are walked over and over within a checkout. Cleared by index(): samples
+    alternate between projects, and `main` exists in most of them.
     """
     if name not in _walked:
         node = _func_node(name)
