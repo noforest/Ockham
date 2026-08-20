@@ -6,13 +6,14 @@ Module-level state, reset by each index() call -- one checkout at a time.
 
 import json
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 import tree_sitter as ts
 import tree_sitter_c
 import tree_sitter_cpp
 
-from .abstraction import CallSite
+from .abstraction import CallSite, ParsedSource
 
 _C = ts.Language(tree_sitter_c.language())
 _CPP = ts.Language(tree_sitter_cpp.language())
@@ -233,3 +234,45 @@ def identifiers(name):
 def keep_lines(name):
     hit = _analyzed(name)
     return None if hit is None else hit[2]
+
+
+def parse_source(source, filename=None):
+    """Walk a function body given as a string. This backend never returns None.
+
+    Used when a name is absent from the symbol table, and by the tests, which drive both
+    stages on synthetic candidates with no repository behind them.
+    """
+    calls, idents, rows = _walk_source(source, filename)
+    # A fresh object per call: the memo below hands out the same tuple to everyone, and a
+    # caller must not be able to mutate another caller's answer.
+    return ParsedSource(calls=list(calls), identifiers=idents, keep_lines=rows)
+
+
+@lru_cache(maxsize=4096)
+def _walk_source(source, filename=None):
+    node = _source_node(source, filename)
+    if node is None:
+        return (), frozenset(), frozenset()
+    calls, idents, rows = _walk_node(node)
+    return tuple(calls), idents, rows
+
+
+def _source_node(source, filename=None):
+    """The function_definition of a detached body, preferring the grammar that parses it clean.
+
+    A body is not a translation unit, but both grammars parse it as one anyway -- a C++
+    body read as C parses "successfully" while dropping the calls inside what C could not
+    make sense of. The suffix decides which to try first when the caller knows it.
+    """
+    src = source.encode("utf-8", "ignore")
+    cpp_first = filename is not None and Path(filename).suffix in _CPP_SUFFIXES
+    parsers = [_PARSER_CPP, _PARSER_C] if cpp_first else [_PARSER_C, _PARSER_CPP]
+    fallback = None
+    for parser in parsers:
+        node = _find(parser.parse(src).root_node, "function_definition")
+        if node is None:
+            continue
+        if not node.has_error:
+            return node
+        fallback = fallback if fallback is not None else node
+    return fallback
