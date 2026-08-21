@@ -1,12 +1,7 @@
 """S4: call-graph neighbourhood (draft: "Call-graph neighborhood").
 
-Keep the functions structurally linked to the target, callers and callees, up to a
-maximum distance K. Examples from the draft: VulEval, ReposVul. Adjacency only, with no
-notion of which edge matters -- that is what will separate it from S5.
-
-Order: distance first, then callees before callers at equal distance. A callee is part
-of what the target DOES, a caller only constrains what it receives. Name breaks the
-remaining ties so the order does not depend on the backend's traversal.
+Callers and callees of the target up to distance K, ordered by distance then callees
+first. Adjacency only, with no notion of which edge matters -- that is S5.
 """
 
 from .. import candidates as C
@@ -18,16 +13,14 @@ CALLEE, CALLER = 0, 1
 
 
 def _callees(name, source, filename, by_name):
-    """Pool functions this body calls. Library calls are not in the pool and drop out."""
+    """Pool functions this body calls; library calls are not in the pool and drop out."""
     return sorted(n for n in syntax.called_names(name, source, filename) if n in by_name)
 
 
 def _callers(name, candidates):
-    """Pool functions whose body calls `name`.
-
-    The substring test in front of the query is not micro-optimisation: the pool is the
-    whole repository, and a body that never mentions the name cannot call it.
-    """
+    """Pool functions whose body calls `name`."""
+    # The pool is the whole repository, so the cheap test goes first: a body that never
+    # mentions the name cannot call it.
     return sorted(c.name for c in candidates
                   if name in c.source and name in syntax.called_names(c.name, c.source, c.file))
 

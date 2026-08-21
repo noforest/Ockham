@@ -1,16 +1,8 @@
 """R1: syntax-preserving code snippets (draft: "Syntax-preserving code snippets").
 
-Each selected function is reduced to the lines that carry meaning for the analysis: its
-signature, what it declares, what guards it, what it calls, what it returns. Original
-line numbers are kept so the model can still name a location, and the elision is
-shown rather than silent. Examples from the draft:
-LLMxCPG, LongCodeZip.
-
-The target is never reduced: it is what the model has to judge.
-
-Limit to state: the draft specifies R1 at statement grain, and this works at function
-grain, because the shared pool offers functions. R1 reduces INSIDE each selected
-function; it cannot keep half a function that selection did not choose.
+Each selected function is reduced to the head line of what it declares, branches, calls
+and returns, keeping the original numbers and showing the elision. The target is never
+reduced. Function grain, not statement grain: the pool offers functions.
 """
 
 from .. import syntax
@@ -32,12 +24,7 @@ def _snippet_block(i, c):
 
 
 def _kept_rows(c, n_lines):
-    """Rows worth keeping: the signature, the closing line, and the head of every construct.
-
-    Rows are offsets into the body the backend was given, whichever backend answered, so
-    they index c.source directly. An empty answer means it could not read this body, and
-    _snippet then falls back to verbatim.
-    """
+    """Body-relative rows to keep: signature, closing line, construct heads. Empty if unread."""
     rows = syntax.keep_lines(c.name, c.source, c.file)
     if not rows:
         return set()
