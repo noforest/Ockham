@@ -33,13 +33,14 @@ def _snippet_block(i, c):
 def _kept_rows(c, n_lines):
     """Rows worth keeping: the signature, the closing line, and the head of every construct.
 
-    Which rows carry the behaviour is a program query, so the backend answers it. An empty
-    answer means it could not read this body, and _snippet then falls back to verbatim.
+    Rows are offsets into the body the backend was given, whichever backend answered, so
+    they index c.source directly. An empty answer means it could not read this body, and
+    _snippet then falls back to verbatim.
     """
     rows = syntax.keep_lines(c.name, c.source, c.file)
     if not rows:
         return set()
-    return {c.line, c.line + n_lines - 1} | set(rows)
+    return {0, n_lines - 1} | set(rows)
 
 
 def _snippet(c):
@@ -49,8 +50,7 @@ def _snippet(c):
         return c.source.strip()      # unreadable body: better verbatim than empty
     out = []
     for row in sorted(rows):
-        i = row - c.line
-        if not 0 <= i < len(lines):
+        if not 0 <= row < len(lines):
             continue
-        out.append(f"{row:6d}| {lines[i].rstrip()}")
+        out.append(f"{c.line + row:6d}| {lines[row].rstrip()}")
     return "\n".join(out)
