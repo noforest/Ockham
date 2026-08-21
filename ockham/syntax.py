@@ -8,7 +8,7 @@ fallback -- the miss is then counted, never answered by the other parser.
 
 from . import candidates as C
 
-_misses = {}   # name -> how many queries the current backend could not answer
+_misses = {}    # name -> how many queries the current backend could not answer
 
 
 def n_symbol_misses():
