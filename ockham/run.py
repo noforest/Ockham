@@ -27,18 +27,20 @@ from . import solver
 from .data import checkout, load_pairs
 from .metrics import compute_metrics, load_results
 from .representation import r0_raw
-from .selection import c0_target_only, c1_same_file, c2_random, s1_bm25
+from .selection import (c0_target_only, c1_same_file, c2_random, s1_bm25,
+                        s4_callgraph)
 
 SELECTORS = {
     "C0": c0_target_only.select,
     "C1": c1_same_file.select,
     "C2": c2_random.select,
     "S1": s1_bm25.select,
+    "S4": s4_callgraph.select,
 }
 REPRESENTATIONS = {"R0": r0_raw.render}
 
 # Selectors that draw from the repository pool, and so need a checkout and an index.
-NEEDS_POOL = {"C1", "C2", "S1"}
+NEEDS_POOL = {"C1", "C2", "S1", "S4"}
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "pairs.jsonl"
