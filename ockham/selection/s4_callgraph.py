@@ -3,12 +3,18 @@
 Keep the functions structurally linked to the target, callers and callees, up to a
 maximum distance K. Examples from the draft: VulEval, ReposVul. Adjacency only, with no
 notion of which edge matters -- that is what will separate it from S5.
+
+Order: distance first, then callees before callers at equal distance. A callee is part
+of what the target DOES, a caller only constrains what it receives. Name breaks the
+remaining ties so the order does not depend on the backend's traversal.
 """
 
 from .. import candidates as C
 from .. import syntax
 
 MAX_DISTANCE = 2
+
+CALLEE, CALLER = 0, 1
 
 
 def _callees(name, source, filename, by_name):
@@ -32,19 +38,20 @@ def select(target, candidates, budget):
     if target_name is None:
         return []
 
-    reached = {}                                        # name -> distance
+    reached = {}                                        # name -> (distance, direction)
     frontier = [(target_name, target.func_body, target.file_name)]
     for distance in range(1, MAX_DISTANCE + 1):
         nxt = []
         for name, source, filename in frontier:
-            neighbours = (_callees(name, source, filename, by_name)
-                          + _callers(name, candidates))
-            for n in neighbours:
+            neighbours = ([(n, CALLEE) for n in _callees(name, source, filename, by_name)]
+                          + [(n, CALLER) for n in _callers(name, candidates)])
+            for n, direction in neighbours:
                 if n in reached or n == target_name:
                     continue
-                reached[n] = distance
+                reached[n] = (distance, direction)
                 nxt.append((n, by_name[n].source, by_name[n].file))
         frontier = nxt
 
-    ordered = sorted((by_name[n] for n in reached), key=lambda c: c.name)
+    ordered = sorted((by_name[n] for n in reached),
+                     key=lambda c: (reached[c.name][0], reached[c.name][1], c.name))
     return C.enforce_budget(ordered, budget)
