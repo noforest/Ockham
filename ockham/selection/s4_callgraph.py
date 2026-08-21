@@ -17,9 +17,13 @@ def _callees(name, source, filename, by_name):
 
 
 def _callers(name, candidates):
-    """Pool functions whose body calls `name`."""
+    """Pool functions whose body calls `name`.
+
+    The substring test in front of the query is not micro-optimisation: the pool is the
+    whole repository, and a body that never mentions the name cannot call it.
+    """
     return sorted(c.name for c in candidates
-                  if name in syntax.called_names(c.name, c.source, c.file))
+                  if name in c.source and name in syntax.called_names(c.name, c.source, c.file))
 
 
 def select(target, candidates, budget):
