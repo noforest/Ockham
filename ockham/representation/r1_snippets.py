@@ -2,7 +2,8 @@
 
 Each selected function is reduced to the lines that carry meaning for the analysis: its
 signature, what it declares, what guards it, what it calls, what it returns. Original
-line numbers are kept so the model can still name a location. Examples from the draft:
+line numbers are kept so the model can still name a location, and the elision is
+shown rather than silent. Examples from the draft:
 LLMxCPG, LongCodeZip.
 
 The target is never reduced: it is what the model has to judge.
@@ -19,7 +20,7 @@ def render(target_source, evidence):
     parts = ["=== TARGET FUNCTION ===", target_source.strip()]
     if evidence:
         parts.append("\n=== CONTEXT (selected functions, reduced to their relevant lines) ===")
-        parts.append("Original line numbers are preserved.")
+        parts.append("Original line numbers are preserved; '...' marks elided lines.")
         for i, c in enumerate(evidence, 1):
             parts.append(_snippet_block(i, c))
     return "\n".join(parts)
@@ -48,9 +49,12 @@ def _snippet(c):
     rows = _kept_rows(c, len(lines))
     if not rows:
         return c.source.strip()      # unreadable body: better verbatim than empty
-    out = []
+    out, previous = [], None
     for row in sorted(rows):
         if not 0 <= row < len(lines):
             continue
+        if previous is not None and row > previous + 1:
+            out.append("      ...")
         out.append(f"{c.line + row:6d}| {lines[row].rstrip()}")
+        previous = row
     return "\n".join(out)
