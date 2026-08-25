@@ -1,9 +1,5 @@
-"""R1: syntax-preserving code snippets (draft: "Syntax-preserving code snippets").
-
-Each selected function is reduced to the head line of what it declares, branches, calls
-and returns, keeping the original numbers and showing the elision. The target is never
-reduced. Function grain, not statement grain: the pool offers functions.
-"""
+"""R1: each selected function reduced to the head line of what it declares, branches,
+calls and returns, keeping the original numbers. The target itself is never reduced."""
 
 from .. import syntax
 
@@ -24,7 +20,7 @@ def _snippet_block(i, c):
 
 
 def _kept_rows(c, n_lines):
-    """Body-relative rows to keep: signature, closing line, construct heads. Empty if unread."""
+    """Body-relative rows to keep: signature, closing line, construct heads."""
     rows = syntax.keep_lines(c.name, c.source, c.file)
     if not rows:
         return set()

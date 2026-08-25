@@ -1,7 +1,6 @@
-"""S4: call-graph neighbourhood (draft: "Call-graph neighborhood").
+"""S4: callers and callees of the target up to distance K, callees first.
 
-Callers and callees of the target up to distance K, ordered by distance then callees
-first. Adjacency only, with no notion of which edge matters -- that is S5.
+Adjacency only, with no notion of which edge matters -- that is S5.
 """
 
 from .. import candidates as C
@@ -19,8 +18,7 @@ def _callees(name, source, filename, by_name):
 
 def _callers(name, candidates):
     """Pool functions whose body calls `name`."""
-    # The pool is the whole repository, so the cheap test goes first: a body that never
-    # mentions the name cannot call it.
+    # The cheap test first: a body that never mentions the name cannot call it.
     return sorted(c.name for c in candidates
                   if name in c.source and name in syntax.called_names(c.name, c.source, c.file))
 

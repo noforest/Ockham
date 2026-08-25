@@ -1,12 +1,8 @@
 """The sentence embedding model behind the dense selector, loaded once per process.
 
-Embedding a whole repository pool is the expensive part of S2, so the vectors are kept
-across samples, keyed per candidate rather than per pool: two samples of one project sit
-at two commits, so their pools rarely match whole but share almost every function.
-
-Two limits of the model are worth recording next to any S2 result: it is general-purpose
-rather than code-trained, and it truncates at 256 word pieces, so long bodies are
-compared on their opening lines only.
+Vectors are cached per candidate, not per pool: two samples of one project sit at two
+commits, so their pools rarely match whole but share almost every function. The model is
+general-purpose and truncates at 256 word pieces, which weakens dense retrieval itself.
 """
 
 import numpy as np

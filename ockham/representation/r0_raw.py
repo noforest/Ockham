@@ -1,8 +1,4 @@
-"""R0: raw source code, the reference representation.
-
-Selected functions are inserted verbatim, each in an [EVIDENCE En] block with a
-provenance header. This is the control every other representation is measured against.
-"""
+"""R0: selected functions inserted verbatim, the control the others are measured against."""
 
 
 def render(target_source, evidence):

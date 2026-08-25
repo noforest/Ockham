@@ -1,11 +1,8 @@
 """The shared candidate stage: token counting, the candidate pool and the budget.
 
-Every selector ranks the same pool under the same token budget, so a difference in
-results is attributable to the selector and not to the pool it drew from.
-
-The backend is an experimental variable, not a fidelity choice. Selecting one swaps
-the whole program-query layer -- symbols, call edges, enclosing conditions -- so a
-cell can be run twice and the gap between the two measured.
+Every selector ranks the same pool under the same budget, so a difference in results
+belongs to the selector and not to the pool it drew from. Which backend answers is an
+experimental variable, not a fidelity choice.
 """
 
 import importlib
@@ -66,13 +63,7 @@ def guess_function_name(body):
 
 
 def ensure_indexed(repo_dir):
-    """Index a checkout unless the current backend has already indexed it.
-
-    Returns (index_time_s, n_symbols). A count of 0 means the backend failed on this
-    repository.
-    Only the first build of a worktree is timed, so a later re-index does not inflate
-    the reported cost.
-    """
+    """Index a checkout once per backend: (index_time_s, n_symbols), 0 meaning it failed."""
     key = (_backend_name, str(repo_dir))
     if key not in _indexed:
         t0 = time.time()
@@ -84,11 +75,9 @@ def ensure_indexed(repo_dir):
 
 
 def build_candidate_pool(sample, repo_dir):
-    """Enumerate the indexed functions into a fixed pool. Call ensure_indexed first.
+    """Every indexed function but the target, with its source and token count.
 
-    Everything except the target itself, each candidate carrying its source and token
-    count so budget enforcement never has to go back to the backend. The pool comes
-    from this sample's own commit, so the patched sibling is not in it.
+    Built at this sample's own commit, so the patched sibling is never in the pool.
     """
     target_name = guess_function_name(sample.func_body)
     pool = []

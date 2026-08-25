@@ -2,15 +2,9 @@
 
     python -m ockham.run --selector C1 --representation R0 --limit 6
 
-A cell applies the same treatment to every sample and writes one row per sample. No
-experiment needs new code, only a different combination of those four values.
-
-Per sample: checkout (only if the selector needs a pool) -> index -> build the pool ->
-select under budget -> represent -> append a row. A checkout or index failure degrades
-the pack to target-only and is counted, never raised.
-
-Every row also carries what has to stay constant across a phase, so constancy can be
-checked afterwards instead of being assumed.
+Per sample: checkout -> index -> pool -> select under budget -> represent -> one row. A
+checkout or index failure degrades the pack to target-only and is counted, never raised.
+Each row repeats what a phase holds constant, so constancy can be checked afterwards.
 """
 
 import argparse
@@ -42,7 +36,7 @@ SELECTORS = {
 }
 REPRESENTATIONS = {"R0": r0_raw.render, "R1": r1_snippets.render}
 
-# Selectors that draw from the repository pool, and so need a checkout and an index.
+# These need a checkout and an index; the others do not.
 NEEDS_POOL = {"C1", "C2", "S1", "S2", "S3", "S4"}
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,12 +45,7 @@ WORKSPACE = ROOT / "workspace"
 
 
 def _select_within_budget(selector_fn, sample, pool, budget):
-    """Run the selector, then hold it to the budget here.
-
-    Calling enforce_budget is a convention selectors are asked to follow; nothing stopped
-    one from overshooting, and "the same budget for every cell" is what the comparison
-    rests on. Checking at this level makes it true for any selector added later.
-    """
+    """Run the selector, then hold it to the budget here rather than trust it to."""
     selected = selector_fn(sample, pool, budget)
     used = sum(c.tokens for c in selected)
     if used > budget:
@@ -207,8 +196,7 @@ def run_cell(cfg):
                 "representation": cfg.representation, "encoding": "text",
                 "budget": cfg.budget, "backend": cfg.backend, "seed": cfg.seed,
                 "model": cfg.model, "base_url": cfg.base_url,
-                # The embedding model is part of a dense cell, not a detail: swapping it
-                # changes what the selector ranks on.
+                # Part of a dense cell, not a detail: swapping it changes what is ranked.
                 "s2_model": embeddings.MODEL_NAME,
                 "prediction": prediction, "model_output_raw": raw, "llm_time_s": llm_s,
                 "target_tokens": C.count_tokens(sample.func_body),

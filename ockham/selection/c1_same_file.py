@@ -1,8 +1,4 @@
-"""C1: same-file proximity, the heuristic baseline.
-
-Keep the other functions of the target's own file, nearest first by line distance:
-previous, next, second previous, second next, and so on. Preceding wins ties.
-"""
+"""C1: the other functions of the target's own file, nearest first by line distance."""
 
 from .. import candidates as C
 

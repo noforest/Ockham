@@ -1,8 +1,4 @@
-"""C0: target function only, the lower bound.
-
-No added context. Returns an empty evidence list, so the representation renders the
-target alone. Needs no candidate pool, and therefore no checkout.
-"""
+"""C0: the target function alone, the lower bound. No pool, so no checkout either."""
 
 
 def select(target, candidates, budget):

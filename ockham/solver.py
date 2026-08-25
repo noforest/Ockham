@@ -1,13 +1,9 @@
-"""The detection call: one pack in, one verdict out.
-
-The prompt forces the verdict as the first word of the reply, so reading it back is a
-parse of that word rather than of free prose.
-"""
+"""The detection call: one pack in, one verdict out, the verdict being the first word."""
 
 from openai import APIError, OpenAI
 
-# The balanced prior is stated on purpose: without it a small model answers VULNERABLE
-# to everything. It is true of this arm only, and has to be dropped on an imbalanced set.
+# The balanced prior is stated on purpose: without it a small model answers VULNERABLE to
+# everything. True of a 50/50 set only, so drop it on an imbalanced one.
 SYSTEM_PROMPT = (
     "Decide whether a C/C++ function contains a vulnerability.\n"
     "The pack has a TARGET FUNCTION (the function to judge) and optionally a CONTEXT "
@@ -39,12 +35,7 @@ def _get_client(base_url, api_key):
 
 
 def extract_verdict(text):
-    """1 vulnerable, 0 safe, -1 unreadable, from the first word of the reply.
-
-    An unreadable reply is never coerced to SAFE. It is a distinct outcome, counted on
-    its own; folded into SAFE it would improve or damage a cell's score depending on
-    the labels it happened to land on.
-    """
+    """1 vulnerable, 0 safe, -1 unreadable: an unreadable reply is never coerced to SAFE."""
     head = text.lstrip()[:12].strip().upper()
     if head.startswith("V"):
         return 1
@@ -54,16 +45,7 @@ def extract_verdict(text):
 
 
 def predict(pack_text, model, base_url, api_key=None, max_tokens=16, seed=None):
-    """Returns (prediction in {1, 0, -1}, raw reply).
-
-    Only the first word is read, so the reply is capped short: a justification we never
-    look at is most of the generation time, and on a thinking model it consumes the whole
-    budget before any verdict is emitted.
-
-    `seed` is forwarded when the endpoint accepts one; with temperature 0 it is what
-    keeps decoding constant across the cells of a phase. Endpoints that ignore the
-    field simply drop it.
-    """
+    """(prediction in {1, 0, -1}, raw reply). Capped short: only the first word is read."""
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
     try:

@@ -2,12 +2,8 @@
 
     python scripts/run_experiment.py --phase 1 --selectors C0 C2 S1 S2 S3 S4 --no-llm
 
-Phase 1 varies the selector at a fixed representation, so the backend sits on the
-phase and never on a single cell: a selector that also changed the backend would win
-on two counts at once with no way to separate them.
-
-A cell whose results file already exists is skipped, which is what makes the loop
-resumable. Nothing else carries state.
+The backend sits on the phase, never on a cell, or a selector could win by changing both
+at once. A cell whose results file exists is skipped; nothing else carries state.
 """
 
 import argparse

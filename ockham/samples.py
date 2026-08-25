@@ -1,10 +1,7 @@
-"""The frozen sample set: drawn once, kept, reused identically by every cell.
+"""The frozen sample set: drawn once, reused identically by every cell of a phase.
 
-Every cell of a phase must see the same functions, or a method can look better simply
-because it was handed easier ones. A seeded draw is not enough on its own: it changes
-silently when the requested size changes, when the pair file is replaced, or when one
-cell uses --limit and another --subsample. So the set is written to disk as an explicit
-list of ids, together with the seed and a hash of the pair file.
+A seeded draw is not enough, since it changes silently with the requested size or the
+pair file, so the ids go to disk with the seed and a hash of that file.
 """
 
 import hashlib
@@ -22,7 +19,7 @@ def draw(samples, n_pairs, seed=0):
 
 
 def sample_set_id(sample_ids):
-    """Short stable hash of the set, recorded in every row so cells can be checked later."""
+    """Short stable hash of the set, recorded in every row."""
     joined = "\n".join(sorted(sample_ids))
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:12]
 

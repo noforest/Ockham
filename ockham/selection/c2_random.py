@@ -1,8 +1,6 @@
-"""C2: random context at equal budget, the negative control.
+"""C2: random functions at equal budget, the negative control.
 
-Functions drawn at random from the repository pool, filling the same budget as the
-method under comparison. It separates "the selector picks relevant evidence" from
-"the model does better with more code in front of it".
+It separates "the selector picks relevant evidence" from "more code helps".
 """
 
 import random
@@ -13,8 +11,7 @@ SEED = 0
 
 
 def select(target, candidates, budget):
-    # Seeded per target, so the draw is fixed for a given sample and independent of the
-    # order the cell happens to visit samples in.
+    # Seeded per target, so the draw does not depend on the order samples are visited in.
     rng = random.Random(f"{SEED}-{target.sample_id}")
     shuffled = list(candidates)
     rng.shuffle(shuffled)
