@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from . import candidates as C
+from . import embeddings
 from . import samples as S
 from . import solver
 from .data import checkout, load_pairs
@@ -206,6 +207,9 @@ def run_cell(cfg):
                 "representation": cfg.representation, "encoding": "text",
                 "budget": cfg.budget, "backend": cfg.backend, "seed": cfg.seed,
                 "model": cfg.model, "base_url": cfg.base_url,
+                # The embedding model is part of a dense cell, not a detail: swapping it
+                # changes what the selector ranks on.
+                "s2_model": embeddings.MODEL_NAME,
                 "prediction": prediction, "model_output_raw": raw, "llm_time_s": llm_s,
                 "target_tokens": C.count_tokens(sample.func_body),
                 "prompt_tokens_total": C.count_tokens(solver.SYSTEM_PROMPT) + pack["pack_tokens"],
