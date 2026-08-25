@@ -1,9 +1,4 @@
-"""S2: dense retrieval, the pool ordered by cosine similarity to the target.
-
-The query is the target source only, never its cve or cwe. The model and its limits
-live in embeddings.py; rank() is exposed apart from select() for the same reason as in
-s1_bm25.
-"""
+"""S2: the pool ordered by cosine similarity to the target, the dense counterpart of S1."""
 
 from .. import candidates as C
 from .. import embeddings

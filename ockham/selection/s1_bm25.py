@@ -1,11 +1,7 @@
-"""S1: lexical retrieval with BM25.
+"""S1: the pool ranked by token and identifier overlap with the target, BM25.
 
-Rank the pool by token and identifier overlap with the target. The query is the target
-source and nothing else: never its cve or cwe, which would leak the label.
-
-rank() is exposed apart from select() because a hybrid selector fuses full rankings,
-not budget-cut results: a candidate the budget drops here can still be pulled back in
-by its other rank.
+rank() is exposed apart from select() because the hybrid selector fuses full rankings,
+not budget-cut results.
 """
 
 import re
@@ -21,9 +17,7 @@ _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 def tokenize(code):
     """Identifier-aware tokens: split on non-alphanumerics, then on camelCase humps.
 
-    read_buffer, readBuffer and ReadBuffer have to share the tokens "read" and "buffer".
-    A whitespace tokenizer scores three spellings of one concept as unrelated, which on
-    C code is most of the vocabulary.
+    read_buffer, readBuffer and ReadBuffer have to share "read" and "buffer".
     """
     words = []
     for raw in _SPLIT.split(code):
@@ -41,8 +35,7 @@ def rank(target, candidates):
     if not query or not any(corpus):
         return list(candidates)
     scores = BM25Okapi(corpus).get_scores(query)
-    # Name breaks ties. Many candidates share a score exactly, and a stable sort would
-    # then echo the pool order, which is the backend's traversal order.
+    # Name breaks ties, or a stable sort would echo the backend's traversal order.
     order = sorted(range(len(candidates)), key=lambda i: (-scores[i], candidates[i].name))
     return [candidates[i] for i in order]
 

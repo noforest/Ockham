@@ -1,17 +1,13 @@
-"""S3: hybrid retrieval, the lexical and dense rankings fused by Reciprocal Rank Fusion.
+"""S3: the lexical and dense rankings fused by Reciprocal Rank Fusion.
 
-RRF combines positions, not scores, so nothing has to be calibrated between two scales
-that are not comparable: BM25 is unbounded, the cosine lives in [-1, 1].
-
-Fusion reads the full rankings, before the budget: a candidate one side cuts off has to
-keep the credit the other side gives it.
+RRF combines positions, not scores, so nothing has to be calibrated between BM25 and a
+cosine. It reads the full rankings: a candidate one side cuts off keeps the other's credit.
 """
 
 from .. import candidates as C
 from . import s1_bm25, s2_dense
 
-# RRF damping constant: rank 1 contributes 1/61, rank 2 1/62, so the head of each list
-# dominates while the tail still nudges the order.
+# RRF damping constant: rank 1 contributes 1/61, so each list's head dominates.
 K = 60
 
 

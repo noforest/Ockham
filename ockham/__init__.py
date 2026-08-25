@@ -1,6 +1,5 @@
 """Context packs for LLM-based vulnerability detection.
 
-The pipeline has two independent stages: selection decides which repository
-functions to keep, representation decides how to encode them. One run crosses
-one selector with one representation at a fixed token budget.
+Two independent stages: selection keeps repository functions, representation encodes
+them. One run crosses one selector with one representation at a fixed token budget.
 """

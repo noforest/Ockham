@@ -1,8 +1,5 @@
-"""Loading the pair dataset.
-
-One JSONL line is a minimal pair: the same function before and after its fix. Each
-line becomes two Samples sharing an idx, the key every pairwise metric groups on.
-"""
+"""Loading the pair dataset: one JSONL line is the same function before and after its
+fix, and becomes two Samples sharing an idx, the key every pairwise metric groups on."""
 
 import json
 import random
@@ -37,16 +34,12 @@ def _clean_body(body):
 
 
 def load_pairs(path, commit_mode="parent-of-fix"):
-    """Read the dataset and explode every pair into its two halves.
-
-    commit_mode "vul-intro" puts the vulnerable half on the introducing commit
-    instead of the parent of the fix.
-    """
+    """Explode every pair into its two halves; "vul-intro" moves the vulnerable half
+    onto the introducing commit instead of the parent of the fix."""
     with open(path, encoding="utf-8") as f:
         raw = [json.loads(line) for line in f]
 
-    # A repeated idx would put four samples under one pair_id, which no pairwise
-    # metric can group.
+    # A repeated idx would put four samples under one pair_id.
     seen = {}
     for d in raw:
         seen.setdefault(d["idx"], d)
@@ -81,11 +74,7 @@ def load_pairs(path, commit_mode="parent-of-fix"):
 
 
 def stratified_subsample(samples, n_pairs=120, seed=0):
-    """Draw about n_pairs pairs, stratified by (project, primary CWE).
-
-    Round-robins across strata so the sample is not dominated by whichever project
-    contributes the most pairs.
-    """
+    """Draw about n_pairs pairs, round-robin over the (project, primary cwe) strata."""
     pairs = {}
     for s in samples:
         pairs.setdefault(s.pair_id, []).append(s)

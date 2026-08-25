@@ -22,7 +22,7 @@ _CONTROL = {"if_statement", "while_statement", "for_statement", "switch_statemen
             "do_statement"}
 _IDENTIFIER_TYPES = {"identifier", "field_identifier", "type_identifier"}
 
-# Node types R1 keeps: the head line only, or an if would drag its whole body in.
+# Head line only, or an if would drag its whole body in.
 _KEEP = {"declaration", "if_statement", "while_statement", "for_statement",
          "switch_statement", "do_statement", "return_statement", "goto_statement",
          "case_statement", "labeled_statement", "call_expression"}
@@ -62,7 +62,7 @@ def index(repo_dir):
 
 
 def symbols():
-    """name -> (file path as a string, 1-indexed line). Read-only view for the pool."""
+    """name -> (file path, 1-indexed line)."""
     return {name: (str(path), int(line) if line else 0)
             for name, (path, line) in _symbols.items()}
 
@@ -115,8 +115,8 @@ def _line_start_col(src, row):
 def _func_node(name):
     """The function_definition a symbol resolves to, or None.
 
-    Descends to the ctags line and climbs back up: under #ifdef, extern "C" or a
-    namespace the function is not a direct child of the translation unit.
+    Descends to the ctags line and climbs back: under #ifdef or a namespace, a function
+    is not a direct child of the translation unit.
     """
     entry = _symbols.get(name)
     if entry is None:
@@ -153,13 +153,10 @@ def _condition_text(ctrl):
 
 
 def _enclosing_conditions(call, stop):
-    """Conditions guarding a call, outermost first.
-
-    Which part of the structure the call sits in decides: its own condition guards
-    nothing (`if (strcmp(a, b) == 0)`), an else branch reports the condition negated.
-    """
-    # tree-sitter rebuilds the Python object on every .parent access, so `is` is never
-    # true for two accesses to the same position. Compare with ==, except against None.
+    """Conditions guarding a call, outermost first: a call inside a condition is not
+    guarded by it, and one in an else branch reports that condition negated."""
+    # tree-sitter rebuilds the Python object on every .parent access, so `is` is never true
+    # between two accesses to one position. Compare with ==.
     conds = []
     prev = call
     node = call.parent
@@ -196,11 +193,7 @@ def _collect_calls(node, fn_node, out):
 
 
 def _walk_node(fn_node):
-    """(calls, identifiers, keep_lines) for one function_definition node.
-
-    keep_lines rows are 0-indexed from the start of the function, so a caller can index
-    straight into the source this backend returned.
-    """
+    """(calls, identifiers, keep_lines) for one node, rows 0-indexed from its start."""
     calls = []
     _collect_calls(fn_node, fn_node, calls)
 
@@ -218,11 +211,7 @@ def _walk_node(fn_node):
 
 
 def _analyzed(name):
-    """Memoised walk of an indexed function, or None if it cannot be located.
-
-    S4 walks the whole pool once per sample. Cleared by index(): samples alternate
-    between projects, and `main` exists in most of them.
-    """
+    """Memoised walk of an indexed function, or None if it cannot be located."""
     if name not in _walked:
         node = _func_node(name)
         _walked[name] = None if node is None else _walk_node(node)
@@ -245,10 +234,7 @@ def keep_lines(name):
 
 
 def parse_source(source, filename=None):
-    """Walk a body given as a string, for a name absent from the symbol table.
-
-    Never None: this backend can always parse. The Joern arm refuses instead.
-    """
+    """Walk a body given as a string, for a name absent from the symbol table."""
     calls, idents, rows = _walk_source(source, filename)
     # Fresh object per call: the memo hands out the same tuple to every caller.
     return ParsedSource(calls=list(calls), identifiers=idents, keep_lines=rows)
@@ -264,10 +250,10 @@ def _walk_source(source, filename=None):
 
 
 def _source_node(source, filename=None):
-    """The function_definition of a detached body, preferring whichever grammar parses clean.
+    """The function_definition of a detached body, preferring the grammar that parses clean.
 
     A C++ body read as C parses "successfully" while dropping calls it could not make
-    sense of, so an error-free tree beats the first one that returns something.
+    sense of.
     """
     src = source.encode("utf-8", "ignore")
     cpp_first = filename is not None and Path(filename).suffix in _CPP_SUFFIXES
