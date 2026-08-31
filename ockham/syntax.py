@@ -6,7 +6,7 @@ falls back to parsing the source we hold, and a refusal is counted, never re-rou
 """
 
 from . import candidates as C
-from .abstraction import PRIMITIVE_APIS  # noqa: F401  (re-exported)
+from .abstraction import PRIMITIVE_APIS, signature  # noqa: F401  (re-exported)
 
 _misses = {}    # name -> how many queries the current backend could not answer
 
