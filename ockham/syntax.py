@@ -6,6 +6,7 @@ falls back to parsing the source we hold, and a refusal is counted, never re-rou
 """
 
 from . import candidates as C
+from .abstraction import PRIMITIVE_APIS  # noqa: F401  (re-exported)
 
 _misses = {}    # name -> how many queries the current backend could not answer
 
@@ -62,3 +63,8 @@ def keep_lines(name, source=None, filename=None):
     """Rows R1 keeps, 0-indexed from the start of the body."""
     hit = _query("keep_lines", name, source, filename)
     return hit if hit is not None else frozenset()
+
+
+def primitives(name, source=None, filename=None):
+    """The primitive operations this body calls directly."""
+    return called_names(name, source, filename) & PRIMITIVE_APIS
