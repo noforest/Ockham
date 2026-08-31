@@ -6,3 +6,4 @@ data/
 results/
 workspace/
 output/
+.env

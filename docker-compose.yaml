@@ -1,0 +1,16 @@
+services:
+  ockham:
+    build: .
+    image: ockham
+    volumes:
+      - ${OCKHAM_ROOT:-.}:/workspace
+    working_dir: /workspace
+    # Results and clones land in the bind mount: write them as the host user, not as root.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      - OCKHAM_API_KEY=${OCKHAM_API_KEY:-}
+      - HOME=/tmp              # that user has no home, and git and joern want one
+      - HF_HUB_OFFLINE=1       # the embedding model is already in the image
+      - JAVA_OPTS=-Xmx8g       # joern-parse over a large checkout
+    stdin_open: true
+    tty: true
