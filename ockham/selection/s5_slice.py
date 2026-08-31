@@ -1,10 +1,4 @@
-"""S5: the pool ranked by the target's dependence on it, rather than by adjacency (S4).
-
-Ranking order: a primitive operation on the path, then hops from the target, then how many
-identifiers the candidate shares with it, then name. The first two criteria read the call
-graph and so change with the selected backend; the third does not, and stays identifier
-overlap rather than a real use-def chain, which is the honest limit of this selector.
-"""
+"""S5: the pool ranked by the target's dependence on it, rather than by adjacency."""
 
 from .. import candidates as C
 from .. import syntax
@@ -28,11 +22,7 @@ def _callee_depths(target_name, target_source, target_file, by_name):
 
 
 def _reaches_primitive(name, by_name, budget, seen, memo):
-    """Is a primitive operation reachable from this function within `budget` local hops?
-
-    Memoised on (name, budget): an answer found with two hops left says nothing about the
-    same function with one hop left.
-    """
+    """Reachable within `budget` hops? Memoised on (name, budget), not on the name."""
     if budget == 0 or name in seen or name not in by_name:
         return False
     if (name, budget) in memo:

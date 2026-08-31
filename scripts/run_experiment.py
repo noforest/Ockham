@@ -1,10 +1,4 @@
-"""Run one phase: the same sample set and budget across a list of cells.
-
-    python scripts/run_experiment.py --phase 1 --selectors C0 C2 S1 S2 S3 S4 S5 --no-llm
-
-The backend sits on the phase, never on a cell, or a selector could win by changing both
-at once. A cell whose results file exists is skipped; nothing else carries state.
-"""
+"""Run one phase: the same sample set, budget and backend across a list of cells."""
 
 import argparse
 import os

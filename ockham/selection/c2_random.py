@@ -1,7 +1,4 @@
-"""C2: random functions at equal budget, the negative control.
-
-It separates "the selector picks relevant evidence" from "more code helps".
-"""
+"""C2: random functions at equal budget, the negative control."""
 
 import random
 

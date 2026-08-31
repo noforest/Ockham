@@ -1,11 +1,4 @@
-"""One experimental cell: (selector, representation, budget, sample set) -> one JSONL file.
-
-    python -m ockham.run --selector C1 --representation R0 --limit 6
-
-Per sample: checkout -> index -> pool -> select under budget -> represent -> one row. A
-checkout or index failure degrades the pack to target-only and is counted, never raised.
-Each row repeats what a phase holds constant, so constancy can be checked afterwards.
-"""
+"""One cell -- selector, representation, budget, sample set -- to one JSONL file."""
 
 import argparse
 import json
@@ -37,7 +30,6 @@ SELECTORS = {
 }
 REPRESENTATIONS = {"R0": r0_raw.render, "R1": r1_snippets.render}
 
-# These need a checkout and an index; the others do not.
 NEEDS_POOL = {"C1", "C2", "S1", "S2", "S3", "S4", "S5"}
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -73,9 +65,7 @@ def build_pack(sample, selector_fn, represent_fn, needs_pool, budget):
 
     index_s, n_symbols = C.ensure_indexed(wt)
     if n_symbols == 0:
-        # The repository checked out but the backend found nothing in it. Counted as a
-        # backend failure: passed off as an empty pool it would read exactly like "the
-        # selector found nothing relevant".
+        # An empty pool would read exactly like a selector finding nothing relevant.
         pack_text = represent_fn(target, [])
         return _ledger(pack_text, [], 0, index_s, (time.time() - t_cold) * 1000, 0.0, 1)
 
@@ -117,15 +107,14 @@ class CellConfig:
     seed: int = 0
     limit: Optional[int] = None
     subsample: Optional[int] = None
-    sample_set: Optional[str] = None       # reuse a frozen set from this path
-    freeze_samples: Optional[str] = None   # draw once and write the set to this path
-    freeze_only: bool = False              # write that set and stop, running no cell
+    sample_set: Optional[str] = None
+    freeze_samples: Optional[str] = None
+    freeze_only: bool = False
     show_pack: bool = False
     out_dir: Optional[Path] = None
 
     def cell_id(self):
-        # The backend belongs in the name: the two arms are distinct cells, and without it
-        # they would overwrite each other's results file.
+        # The backend belongs in the name, or the two arms overwrite each other.
         return f"{self.selector}_{self.representation}_b{self.budget}_{self.backend}"
 
 
@@ -197,7 +186,6 @@ def run_cell(cfg):
                 "representation": cfg.representation, "encoding": "text",
                 "budget": cfg.budget, "backend": cfg.backend, "seed": cfg.seed,
                 "model": cfg.model, "base_url": cfg.base_url,
-                # Part of a dense cell, not a detail: swapping it changes what is ranked.
                 "s2_model": embeddings.MODEL_NAME,
                 "prediction": prediction, "model_output_raw": raw, "llm_time_s": llm_s,
                 "target_tokens": C.count_tokens(sample.func_body),

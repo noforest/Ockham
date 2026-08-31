@@ -1,5 +1,4 @@
-"""R1: each selected function reduced to the head line of what it declares, branches,
-calls and returns, keeping the original numbers. The target itself is never reduced."""
+"""R1: each selected function reduced to its head lines, original numbers kept."""
 
 from .. import syntax
 

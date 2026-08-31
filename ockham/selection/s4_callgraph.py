@@ -1,7 +1,4 @@
-"""S4: callers and callees of the target up to distance K, callees first.
-
-Adjacency only, with no notion of which edge matters -- that is S5.
-"""
+"""S4: callers and callees of the target up to distance K, callees first."""
 
 from .. import candidates as C
 from .. import syntax

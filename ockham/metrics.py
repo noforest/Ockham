@@ -1,9 +1,4 @@
-"""Detection metrics, read back from the per-sample JSONL.
-
-pAcc, paired by pair_id, is the primary measure, and F1 is only ever printed next to
-F1_trivial, the always-vulnerable classifier on the same distribution. Backend failures
-and unreadable replies stay out of the accuracy figures and are reported on their own.
-"""
+"""Detection metrics read back from the per-sample JSONL; pAcc is the primary one."""
 
 import json
 import sys
@@ -25,10 +20,7 @@ def load_results(path):
 
 
 def _pairwise(df):
-    """P-C/P-V/P-B/P-R, paired by pair_id: both right, both vulnerable, both benign, swapped.
-
-    A pair holding an unreadable reply matches no bucket and is dropped, not counted wrong.
-    """
+    """P-C/P-V/P-B/P-R by pair_id; a pair holding an unreadable reply is dropped."""
     counts = {"P-C": 0, "P-V": 0, "P-B": 0, "P-R": 0}
     n_pairs = 0
     n_dropped = 0

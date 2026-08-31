@@ -1,9 +1,4 @@
-"""Program queries about a function, asked by name of the selected backend.
-
-That is what makes --backend an experimental variable: it switches the call graph the
-selectors walk, not merely where the pool came from. A name the backend cannot resolve
-falls back to parsing the source we hold, and a refusal is counted, never re-routed.
-"""
+"""Program queries about a function, routed by name to the selected backend."""
 
 from . import candidates as C
 from .abstraction import PRIMITIVE_APIS, signature  # noqa: F401  (re-exported)

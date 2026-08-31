@@ -1,8 +1,4 @@
-"""S3: the lexical and dense rankings fused by Reciprocal Rank Fusion.
-
-RRF combines positions, not scores, so nothing has to be calibrated between BM25 and a
-cosine. It reads the full rankings: a candidate one side cuts off keeps the other's credit.
-"""
+"""S3: the lexical and dense rankings fused by Reciprocal Rank Fusion over positions."""
 
 from .. import candidates as C
 from . import s1_bm25, s2_dense

@@ -1,9 +1,4 @@
-"""The sentence embedding model behind the dense selector, loaded once per process.
-
-Vectors are cached per candidate, not per pool: two samples of one project sit at two
-commits, so their pools rarely match whole but share almost every function. The model is
-general-purpose and truncates at 256 word pieces, which weakens dense retrieval itself.
-"""
+"""The sentence embedding model behind S2, loaded once and cached per candidate."""
 
 import numpy as np
 
