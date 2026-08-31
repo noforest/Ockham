@@ -36,14 +36,6 @@ Every command above runs unchanged inside the container:
 ```bash
 docker compose run --rm ockham python -m ockham.run --selector S5 --representation R0 --limit 6 --no-llm
 docker compose run --rm ockham python scripts/run_experiment.py --phase 1 --out-dir results/exp1 --no-llm
-```
-
-The embedding model and the tokenizer are baked into the image, so a run needs the
-network only to clone the repositories under test. `OCKHAM_API_KEY` reaches the model
-endpoint through the environment or `.env`; `OCKHAM_ROOT` chooses which host directory
-is mounted. Detach a long run so it outlives the ssh session:
-
-```bash
 docker compose run -d --rm ockham python scripts/run_experiment.py --phase 1 --out-dir results/exp1
 ```
 
