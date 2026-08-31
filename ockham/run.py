@@ -23,7 +23,7 @@ from .data import checkout, load_pairs
 from .metrics import compute_metrics, load_results
 from .representation import r0_raw, r1_snippets
 from .selection import (c0_target_only, c1_same_file, c2_random, s1_bm25, s2_dense,
-                        s3_hybrid, s4_callgraph)
+                        s3_hybrid, s4_callgraph, s5_slice)
 
 SELECTORS = {
     "C0": c0_target_only.select,
@@ -33,11 +33,12 @@ SELECTORS = {
     "S2": s2_dense.select,
     "S3": s3_hybrid.select,
     "S4": s4_callgraph.select,
+    "S5": s5_slice.select,
 }
 REPRESENTATIONS = {"R0": r0_raw.render, "R1": r1_snippets.render}
 
 # These need a checkout and an index; the others do not.
-NEEDS_POOL = {"C1", "C2", "S1", "S2", "S3", "S4"}
+NEEDS_POOL = {"C1", "C2", "S1", "S2", "S3", "S4", "S5"}
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "pairs.jsonl"

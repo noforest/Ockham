@@ -1,6 +1,6 @@
 """Run one phase: the same sample set and budget across a list of cells.
 
-    python scripts/run_experiment.py --phase 1 --selectors C0 C2 S1 S2 S3 S4 --no-llm
+    python scripts/run_experiment.py --phase 1 --selectors C0 C2 S1 S2 S3 S4 S5 --no-llm
 
 The backend sits on the phase, never on a cell, or a selector could win by changing both
 at once. A cell whose results file exists is skipped; nothing else carries state.
@@ -32,7 +32,7 @@ def freeze_once(path, data, subsample, seed):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--phase", type=int, choices=sorted(PHASES), default=1)
-    ap.add_argument("--selectors", nargs="+", default=["C0", "C2", "S1", "S2", "S3", "S4"])
+    ap.add_argument("--selectors", nargs="+", default=["C0", "C2", "S1", "S2", "S3", "S4", "S5"])
     ap.add_argument("--backend", default="ts", help="held constant across the phase")
     ap.add_argument("--budget", type=int, default=2000)
     ap.add_argument("--data", default=str(DATA))
