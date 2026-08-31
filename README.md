@@ -7,6 +7,14 @@
 Building the smallest repository context an LLM needs to decide whether a C/C++
 function is vulnerable.
 
+## Dataset
+
+```bash
+mkdir data
+cd data
+curl -Lo pairs.jsonl https://raw.githubusercontent.com/alperen21/JitVul/main/data/final_benchmark.jsonl
+```
+
 ## Usage
 
 ```python
