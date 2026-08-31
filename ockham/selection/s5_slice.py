@@ -28,16 +28,20 @@ def _callee_depths(target_name, target_source, target_file, by_name):
 
 
 def _reaches_primitive(name, by_name, budget, seen, memo):
-    """Is a primitive operation reachable from this function within `budget` local hops?"""
+    """Is a primitive operation reachable from this function within `budget` local hops?
+
+    Memoised on (name, budget): an answer found with two hops left says nothing about the
+    same function with one hop left.
+    """
     if budget == 0 or name in seen or name not in by_name:
         return False
-    if name in memo:
-        return memo[name]
+    if (name, budget) in memo:
+        return memo[(name, budget)]
     c = by_name[name]
     called = syntax.called_names(c.name, c.source, c.file)
     hit = bool(called & syntax.PRIMITIVE_APIS) or any(
         _reaches_primitive(n, by_name, budget - 1, seen | {name}, memo) for n in sorted(called))
-    memo[name] = hit
+    memo[(name, budget)] = hit
     return hit
 
 
