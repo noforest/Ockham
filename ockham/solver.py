@@ -2,8 +2,7 @@
 
 from openai import APIError, OpenAI
 
-# The balanced prior is stated on purpose: without it a small model answers VULNERABLE to
-# everything. True of a 50/50 set only, so drop it on an imbalanced one.
+# The balanced prior holds on a 50/50 set only; drop it on an imbalanced one.
 SYSTEM_PROMPT = (
     "Decide whether a C/C++ function contains a vulnerability.\n"
     "The pack has a TARGET FUNCTION (the function to judge) and optionally a CONTEXT "

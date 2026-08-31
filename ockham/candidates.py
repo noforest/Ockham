@@ -1,9 +1,4 @@
-"""The shared candidate stage: token counting, the candidate pool and the budget.
-
-Every selector ranks the same pool under the same budget, so a difference in results
-belongs to the selector and not to the pool it drew from. Which backend answers is an
-experimental variable, not a fidelity choice.
-"""
+"""The shared candidate stage: token counting, the candidate pool and the budget."""
 
 import importlib
 import re
@@ -19,8 +14,8 @@ BACKENDS = ("ts", "joern")
 _backend_name = "ts"
 _BACKEND = None
 _indexed = set()      # (backend, worktree) pairs already indexed
-_index_times = {}     # (backend, worktree) -> cost of its first index build, in seconds
-_index_counts = {}    # (backend, worktree) -> symbols found; 0 means the backend failed
+_index_times = {}     # -> seconds spent on the first index build
+_index_counts = {}    # -> symbols found; 0 means the backend failed
 
 
 def set_backend(which):
@@ -75,10 +70,7 @@ def ensure_indexed(repo_dir):
 
 
 def build_candidate_pool(sample, repo_dir):
-    """Every indexed function but the target, with its source and token count.
-
-    Built at this sample's own commit, so the patched sibling is never in the pool.
-    """
+    """Every indexed function but the target, built at this sample's own commit."""
     target_name = guess_function_name(sample.func_body)
     pool = []
     for name, (path, line) in backend().symbols().items():

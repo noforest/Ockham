@@ -1,5 +1,4 @@
-"""Loading the pair dataset: one JSONL line is the same function before and after its
-fix, and becomes two Samples sharing an idx, the key every pairwise metric groups on."""
+"""Loading the pair file: one line becomes two Samples sharing an idx."""
 
 import json
 import random
@@ -23,8 +22,8 @@ class Sample:
     cwe: list = field(default_factory=list)
     project: str = ""
     project_url: str = ""
-    file_name: str = ""     # repo-relative
-    commit: str = ""        # the commit this half of the pair lives at
+    file_name: str = ""
+    commit: str = ""
     func_body: str = ""
     label: int = 0          # 1 vulnerable, 0 benign
 
@@ -34,8 +33,7 @@ def _clean_body(body):
 
 
 def load_pairs(path, commit_mode="parent-of-fix"):
-    """Explode every pair into its two halves; "vul-intro" moves the vulnerable half
-    onto the introducing commit instead of the parent of the fix."""
+    """Explode every pair into its two halves, at the commit the mode selects."""
     with open(path, encoding="utf-8") as f:
         raw = [json.loads(line) for line in f]
 

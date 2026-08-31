@@ -1,8 +1,4 @@
-"""S1: the pool ranked by token and identifier overlap with the target, BM25.
-
-rank() is exposed apart from select() because the hybrid selector fuses full rankings,
-not budget-cut results.
-"""
+"""S1: the pool ranked by BM25 overlap with the target; rank() is exposed for S3."""
 
 import re
 
@@ -15,10 +11,7 @@ _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
 
 def tokenize(code):
-    """Identifier-aware tokens: split on non-alphanumerics, then on camelCase humps.
-
-    read_buffer, readBuffer and ReadBuffer have to share "read" and "buffer".
-    """
+    """Identifier-aware tokens: split on non-alphanumerics, then on camelCase humps."""
     words = []
     for raw in _SPLIT.split(code):
         if raw:

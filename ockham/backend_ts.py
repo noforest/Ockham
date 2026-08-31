@@ -1,5 +1,4 @@
-"""tree-sitter + ctags backend: ctags resolves a name to (file, line), tree-sitter
-parses that file and walks the AST. One checkout at a time, reset by index()."""
+"""tree-sitter + ctags backend: ctags resolves a name to a file and line, tree-sitter walks it."""
 
 import json
 import subprocess
@@ -113,11 +112,7 @@ def _line_start_col(src, row):
 
 
 def _func_node(name):
-    """The function_definition a symbol resolves to, or None.
-
-    Descends to the ctags line and climbs back: under #ifdef or a namespace, a function
-    is not a direct child of the translation unit.
-    """
+    """The function_definition a symbol resolves to, reached by descending to its line."""
     entry = _symbols.get(name)
     if entry is None:
         return None
@@ -153,10 +148,8 @@ def _condition_text(ctrl):
 
 
 def _enclosing_conditions(call, stop):
-    """Conditions guarding a call, outermost first: a call inside a condition is not
-    guarded by it, and one in an else branch reports that condition negated."""
-    # tree-sitter rebuilds the Python object on every .parent access, so `is` is never true
-    # between two accesses to one position. Compare with ==.
+    """Conditions guarding a call, outermost first, an else branch reported negated."""
+    # tree-sitter rebuilds the node object on every .parent access, so never compare with `is`.
     conds = []
     prev = call
     node = call.parent
@@ -250,11 +243,7 @@ def _walk_source(source, filename=None):
 
 
 def _source_node(source, filename=None):
-    """The function_definition of a detached body, preferring the grammar that parses clean.
-
-    A C++ body read as C parses "successfully" while dropping calls it could not make
-    sense of.
-    """
+    """The function_definition of a detached body, preferring the grammar that parses clean."""
     src = source.encode("utf-8", "ignore")
     cpp_first = filename is not None and Path(filename).suffix in _CPP_SUFFIXES
     parsers = [_PARSER_CPP, _PARSER_C] if cpp_first else [_PARSER_C, _PARSER_CPP]

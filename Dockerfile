@@ -4,7 +4,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git universal-ctags \
     && rm -rf /var/lib/apt/lists/*
 
-# The checkouts are bind-mounted and owned by the host user, so git would refuse them.
+# The checkouts are bind-mounted and owned by the host user; git refuses them otherwise.
 RUN git config --system --add safe.directory '*'
 
 WORKDIR /workspace
@@ -18,8 +18,7 @@ ENV HF_HOME=/opt/hf \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/workspace
 
-# Baked in so a run needs no network: otherwise the model download fails and the token
-# count falls back to a word count, which silently changes what the budget means.
+# Baked in: without them an offline run falls back to a word count for the budget.
 RUN python -c "from sentence_transformers import SentenceTransformer; \
         SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')" \
     && python -c "import tiktoken; tiktoken.get_encoding('cl100k_base')" \

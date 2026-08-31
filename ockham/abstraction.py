@@ -1,10 +1,4 @@
-"""The shapes both backends answer with, and the walk from a function to what it reaches.
-
-The list of primitive operations is one CWE-agnostic union applied to every sample alike:
-choosing it per ground-truth weakness class would leak the label into the pack. The walk
-speaks only the backend convention get_function(name) / get_calls(name), so it never
-branches on which backend is selected -- if it needed to, the interface would have leaked.
-"""
+"""Backend-shaped types, the fixed primitive-operation list, and the depth-3 walk."""
 
 from dataclasses import dataclass, field
 
@@ -72,7 +66,6 @@ def _analyze(backend, fn_name, depth, visiting, memo, depth_counts):
             for api, sub_info in sub.items():
                 info = result.setdefault(api, ApiInfo())
                 info.count += sub_info.count
-                # The caller's own condition guards everything the callee does.
                 info.branches.extend(_compose(cond, b) for b in sub_info.branches)
 
     memo[fn_name] = result
@@ -109,11 +102,7 @@ def render_apis(apis):
 
 
 def callee_breakdown(backend, fn_name):
-    """Same walk as primitive_api_a3, but findings stay grouped under each direct callee.
-
-    A pack rendered from one flattened dict says which operations are reached; grouped, it
-    also says through which callee, which is what makes the abstraction readable.
-    """
+    """primitive_api_a3 with the findings kept grouped under each direct callee."""
     depth_counts = {}
     direct = {}
     by_callee = {}   # callee name -> [signature, {api: ApiInfo}]
