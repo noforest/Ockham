@@ -90,3 +90,51 @@ def signature(code):
     """Everything before the first '{', whitespace collapsed, else the first line."""
     sig = " ".join(code.split("{", 1)[0].split())
     return sig or code.splitlines()[0].strip()
+
+
+def render_apis(apis):
+    """{api: ApiInfo} as lines, each distinct branch condition listed once with its count."""
+    lines = []
+    for api, info in apis.items():
+        counts, order = {}, []
+        for b in info.branches:
+            if b not in counts:
+                order.append(b)
+            counts[b] = counts.get(b, 0) + 1
+        lines.append(f"{api} ({info.count}x):")
+        for b in order:
+            suffix = f" (x{counts[b]})" if counts[b] > 1 else ""
+            lines.append(f"  {b}{suffix}")
+    return lines
+
+
+def callee_breakdown(backend, fn_name):
+    """Same walk as primitive_api_a3, but findings stay grouped under each direct callee.
+
+    A pack rendered from one flattened dict says which operations are reached; grouped, it
+    also says through which callee, which is what makes the abstraction readable.
+    """
+    depth_counts = {}
+    direct = {}
+    by_callee = {}   # callee name -> [signature, {api: ApiInfo}]
+    memo = {}
+    for call in backend.get_calls(fn_name):
+        cond = " && ".join(call.conditions) if call.conditions else "unconditionally"
+        if call.name in PRIMITIVE_APIS:
+            info = direct.setdefault(call.name, ApiInfo())
+            info.count += 1
+            info.branches.append(cond)
+            depth_counts[1] = depth_counts.get(1, 0) + 1
+        elif backend.get_function(call.name) is not None:
+            sub = _analyze(backend, call.name, DEPTH - 1, frozenset({fn_name}), memo,
+                           depth_counts)
+            if not sub:
+                continue
+            if call.name not in by_callee:
+                by_callee[call.name] = [signature(backend.get_function(call.name)), {}]
+            bucket = by_callee[call.name][1]
+            for api, sub_info in sub.items():
+                info = bucket.setdefault(api, ApiInfo())
+                info.count += sub_info.count
+                info.branches.extend(_compose(cond, b) for b in sub_info.branches)
+    return direct, by_callee, depth_counts
