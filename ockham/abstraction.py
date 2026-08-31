@@ -33,3 +33,9 @@ class ParsedSource:
     calls: list = field(default_factory=list)
     identifiers: frozenset = frozenset()
     keep_lines: frozenset = frozenset()   # rows 0-indexed from the start of the body
+
+
+def signature(code):
+    """Everything before the first '{', whitespace collapsed, else the first line."""
+    sig = " ".join(code.split("{", 1)[0].split())
+    return sig or code.splitlines()[0].strip()
