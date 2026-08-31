@@ -27,10 +27,18 @@ def _callee_depths(target_name, target_source, target_file, by_name):
     return depth
 
 
-def _reaches_primitive(name, by_name):
-    """Does this function touch a primitive operation?"""
+def _reaches_primitive(name, by_name, budget, seen, memo):
+    """Is a primitive operation reachable from this function within `budget` local hops?"""
+    if budget == 0 or name in seen or name not in by_name:
+        return False
+    if name in memo:
+        return memo[name]
     c = by_name[name]
-    return bool(syntax.primitives(c.name, c.source, c.file))
+    called = syntax.called_names(c.name, c.source, c.file)
+    hit = bool(called & syntax.PRIMITIVE_APIS) or any(
+        _reaches_primitive(n, by_name, budget - 1, seen | {name}, memo) for n in sorted(called))
+    memo[name] = hit
+    return hit
 
 
 def select(target, candidates, budget):
@@ -41,10 +49,11 @@ def select(target, candidates, budget):
         return []
 
     target_ids = syntax.identifiers(target_name, target.func_body, target.file_name)
+    memo = {}
     ordered = sorted(
         (by_name[n] for n in depth),
         key=lambda c: (
-            0 if _reaches_primitive(c.name, by_name) else 1,
+            0 if _reaches_primitive(c.name, by_name, DEPTH, frozenset(), memo) else 1,
             depth[c.name],
             -len(syntax.identifiers(c.name, c.source, c.file) & target_ids),
             c.name,
