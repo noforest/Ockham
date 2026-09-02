@@ -67,12 +67,11 @@ def _prob_metrics(df_parsed):
     if len(prob) == 0 or len(set(y.tolist())) < 2:
         return {"AUPRC": nan, "AUROC": nan, "Brier": nan, "calibration_error": nan,
                 "n_prob_samples": int(len(prob))}
-    decision = (p >= 0.5).astype(float)
     return {
         "AUPRC": float(average_precision_score(y, p)),
         "AUROC": float(roc_auc_score(y, p)),
-        "Brier": float(brier_score_loss(y, decision)),
-        "calibration_error": _calibration_error(y, decision),
+        "Brier": float(brier_score_loss(y, p)),
+        "calibration_error": _calibration_error(y, p),
         "n_prob_samples": int(len(prob)),
     }
 
