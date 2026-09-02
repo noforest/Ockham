@@ -8,9 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from ockham import samples as S                                   # noqa: E402
-from ockham.data import load_pairs                                # noqa: E402
-from ockham.run import DATA, CellConfig, run_cell                 # noqa: E402
+from ockham import samples as S
+from ockham.data import load_pairs
+from ockham.run import DATA, CellConfig, run_cell
 
 PHASES = {1: {"representations": ["R0"]}}
 
