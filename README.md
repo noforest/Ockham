@@ -19,14 +19,19 @@ curl -Lo pairs.jsonl https://raw.githubusercontent.com/alperen21/JitVul/main/dat
 
 ```python
 # draw a sample set
-python -m ockham.run --selector C0 --representation R0 --subsample 20 \
-    --freeze-samples results/exp1/sample_set.json --freeze-only
+python -m ockham.run --subsample 60 --seed 0 \
+    --freeze-samples results/exp1/sample_set_60_pairs.json --freeze-only
 
 # one cell without the model call: pack size and build time only
 python -m ockham.run --selector S4 --representation R1 --limit 6 --no-llm
 
 # a full phase: every selector on that frozen set, written to one directory
-python scripts/run_experiment.py --phase 1 --model <model> --base-url <url> --out-dir results/exp1
+python scripts/run_experiment.py --phase 1 --repeat 3 --budget 2000 --seed 0 \
+    --sample-set results/exp1/sample_set_60_pairs.json \
+    --model <model> \
+    --base-url <url> \
+    --api-key "$API_KEY" \
+    --out-dir results/exp1
 
 # read the results data into nice tables
 python scripts/show_metrics.py results/exp1
@@ -46,4 +51,5 @@ docker compose run --rm ockham python -m ockham.run --selector S5 --representati
 docker compose run --rm ockham python scripts/run_experiment.py --phase 1 --out-dir results/exp1 --no-llm
 docker compose run -d --rm ockham python scripts/run_experiment.py --phase 1 --out-dir results/exp1
 ```
+
 
