@@ -4,14 +4,18 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from sklearn.metrics import (
     accuracy_score,
+    average_precision_score,
     balanced_accuracy_score,
+    brier_score_loss,
     f1_score,
     matthews_corrcoef,
     precision_score,
     recall_score,
+    roc_auc_score,
 )
 
 
@@ -39,6 +43,40 @@ def _pairwise(df):
     return counts, n_pairs, n_dropped
 
 
+def _calibration_error(y_true, p, n_bins=10):
+    """Expected calibration error: |accuracy - confidence| averaged over confidence bins."""
+    y_true = np.asarray(y_true, dtype=float)
+    p = np.asarray(p, dtype=float)
+    conf = np.where(p >= 0.5, p, 1 - p)
+    correct = ((p >= 0.5).astype(float) == y_true).astype(float)
+    edges = np.linspace(0, 1, n_bins + 1)
+    ece = 0.0
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (conf > lo) & (conf <= hi)
+        if m.any():
+            ece += m.mean() * abs(correct[m].mean() - conf[m].mean())
+    return float(ece)
+
+
+def _prob_metrics(df_parsed):
+    """AUPRC / AUROC / Brier / calibration on rows carrying a probability and both classes."""
+    prob = df_parsed[df_parsed.p_vulnerable.notna()]
+    y = prob.label.to_numpy()
+    p = prob.p_vulnerable.to_numpy()
+    nan = float("nan")
+    if len(prob) == 0 or len(set(y.tolist())) < 2:
+        return {"AUPRC": nan, "AUROC": nan, "Brier": nan, "calibration_error": nan,
+                "n_prob_samples": int(len(prob))}
+    decision = (p >= 0.5).astype(float)
+    return {
+        "AUPRC": float(average_precision_score(y, p)),
+        "AUROC": float(roc_auc_score(y, p)),
+        "Brier": float(brier_score_loss(y, decision)),
+        "calibration_error": _calibration_error(y, decision),
+        "n_prob_samples": int(len(prob)),
+    }
+
+
 def compute_metrics(df):
     nan = float("nan")
     clean = df[df.n_backend_failures == 0] if len(df) else df
@@ -63,6 +101,9 @@ def compute_metrics(df):
         "accuracy": float(accuracy_score(y_true, y_pred)) if has else nan,
         "unparsable_rate": 1 - len(parsed) / len(clean) if len(clean) else nan,
     }
+    out.update(_prob_metrics(parsed) if has else
+               {"AUPRC": nan, "AUROC": nan, "Brier": nan, "calibration_error": nan,
+                "n_prob_samples": 0})
     out.update({
         "mean_pack_tokens": float(df.pack_tokens.mean()) if len(df) else nan,
         "mean_evidence_tokens": float(df.n_evidence_tokens.mean()) if len(df) else nan,
