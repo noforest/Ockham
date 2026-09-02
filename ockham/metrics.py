@@ -28,11 +28,13 @@ def _pairwise(df):
     counts = {"P-C": 0, "P-V": 0, "P-B": 0, "P-R": 0}
     n_pairs = 0
     n_dropped = 0
+    n_incomplete = 0
     outcome = {(1, 0): "P-C", (1, 1): "P-V", (0, 0): "P-B", (0, 1): "P-R"}
     for _, group in df.groupby("pair_id"):
         vuln = group[group.label == 1]
         benign = group[group.label == 0]
         if len(vuln) != 1 or len(benign) != 1:
+            n_incomplete += 1
             continue
         key = outcome.get((vuln.iloc[0].prediction, benign.iloc[0].prediction))
         if key is None:
@@ -40,7 +42,7 @@ def _pairwise(df):
             continue
         n_pairs += 1
         counts[key] += 1
-    return counts, n_pairs, n_dropped
+    return counts, n_pairs, n_dropped, n_incomplete
 
 
 def _pair_rank_acc(df):
@@ -104,13 +106,14 @@ def compute_metrics(df):
     has = len(parsed) > 0
     y_true, y_pred = (parsed.label, parsed.prediction) if has else ([], [])
 
-    counts, n_pairs, n_pairs_dropped = _pairwise(clean)
+    counts, n_pairs, n_pairs_dropped, n_pairs_incomplete = _pairwise(clean)
     rank_acc, n_ranked = _pair_rank_acc(parsed) if has else (nan, 0)
     out = {
         "n_samples": len(df),
         "n_samples_excluding_backend_failures": len(clean),
         "n_pairs": n_pairs,
         "n_pairs_dropped_unparsable": n_pairs_dropped,
+        "n_pairs_dropped_backend_failure": n_pairs_incomplete,
         "pAcc": counts["P-C"] / n_pairs if n_pairs else nan,
         **counts,
         "pair_rank_acc": rank_acc,
