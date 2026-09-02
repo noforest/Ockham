@@ -43,6 +43,27 @@ def _pairwise(df):
     return counts, n_pairs, n_dropped
 
 
+def _pair_rank_acc(df):
+    """Share of pairs whose vulnerable member gets the higher probability; ties count half.
+
+    A ranking measure reported next to pAcc, never a decision rule. Turning it into one --
+    forcing the less-probable member of a both-vulnerable pair to safe -- would state that
+    exactly one of the two is vulnerable, which is a property of how the set is built and
+    not something a detector is given.
+    """
+    wins = 0.0
+    n = 0
+    for _, group in df.groupby("pair_id"):
+        vuln = group[(group.label == 1) & group.p_vulnerable.notna()]
+        benign = group[(group.label == 0) & group.p_vulnerable.notna()]
+        if len(vuln) != 1 or len(benign) != 1:
+            continue
+        pv, pb = float(vuln.iloc[0].p_vulnerable), float(benign.iloc[0].p_vulnerable)
+        wins += 1.0 if pv > pb else 0.5 if pv == pb else 0.0
+        n += 1
+    return (wins / n if n else float("nan")), n
+
+
 def _calibration_error(y_true, p, n_bins=10):
     """Expected calibration error: |accuracy - confidence| averaged over confidence bins."""
     y_true = np.asarray(y_true, dtype=float)
@@ -84,6 +105,7 @@ def compute_metrics(df):
     y_true, y_pred = (parsed.label, parsed.prediction) if has else ([], [])
 
     counts, n_pairs, n_pairs_dropped = _pairwise(clean)
+    rank_acc, n_ranked = _pair_rank_acc(parsed) if has else (nan, 0)
     out = {
         "n_samples": len(df),
         "n_samples_excluding_backend_failures": len(clean),
@@ -91,6 +113,8 @@ def compute_metrics(df):
         "n_pairs_dropped_unparsable": n_pairs_dropped,
         "pAcc": counts["P-C"] / n_pairs if n_pairs else nan,
         **counts,
+        "pair_rank_acc": rank_acc,
+        "n_pairs_ranked": n_ranked,
         "MCC": float(matthews_corrcoef(y_true, y_pred)) if has else nan,
         "F1": float(f1_score(y_true, y_pred)) if has else nan,
         "F1_trivial": float(f1_score(y_true, [1] * len(y_true))) if has else nan,
