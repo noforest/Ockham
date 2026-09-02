@@ -1,4 +1,6 @@
-"""The detection call: one pack in, one verdict out, the verdict being the first word."""
+"""The detection call: one pack in, a verdict and its probability out, both from token 0."""
+
+import math
 
 from openai import APIError, OpenAI
 
@@ -19,6 +21,7 @@ SYSTEM_PROMPT = (
 
 
 REQUEST_TIMEOUT_S = 120
+_TOP_LOGPROBS = 5
 
 _client = None
 _client_base_url = None
@@ -33,18 +36,46 @@ def _get_client(base_url, api_key):
     return _client
 
 
-def extract_verdict(text):
-    """1 vulnerable, 0 safe, -1 unreadable: an unreadable reply is never coerced to SAFE."""
-    head = text.lstrip()[:12].strip().upper()
-    if head.startswith("V"):
-        return 1
-    if head.startswith("S"):
-        return 0
-    return -1
+def _side(token):
+    """Which verdict a token starts, or None."""
+    t = token.strip().upper()
+    if not t:
+        return None
+    return "V" if t[0] == "V" else "S" if t[0] == "S" else None
+
+
+def extract_verdict(first_token_logprobs):
+    """(prediction, p_vulnerable) from token 0: softmax over the two verdict logprobs.
+
+    Neither verdict among the candidates means unreadable, never SAFE. When only one
+    side is there, the missing logprob is floored at the lowest candidate, a lower
+    bound that still yields a usable probability for a confident one-sided reply.
+    """
+    lp_v = lp_s = None
+    all_lps = []
+    for e in first_token_logprobs:
+        all_lps.append(e.logprob)
+        side = _side(e.token)
+        if side == "V" and (lp_v is None or e.logprob > lp_v):
+            lp_v = e.logprob
+        elif side == "S" and (lp_s is None or e.logprob > lp_s):
+            lp_s = e.logprob
+    if lp_v is None and lp_s is None:
+        return -1, None
+    floor = min(all_lps) if all_lps else -20.0
+    lp_v = floor if lp_v is None else lp_v
+    lp_s = floor if lp_s is None else lp_s
+    return (1 if lp_v >= lp_s else 0), math.exp(lp_v) / (math.exp(lp_v) + math.exp(lp_s))
+
+
+def _hard_parse(text):
+    """Fallback when the server returns no logprobs: the first word only, no probability."""
+    side = _side(text.lstrip()[:12])
+    return 1 if side == "V" else 0 if side == "S" else -1
 
 
 def predict(pack_text, model, base_url, api_key=None, max_tokens=16, seed=None):
-    """(prediction in {1, 0, -1}, raw reply). Capped short: only the first word is read."""
+    """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply), from a single call."""
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
     try:
@@ -52,9 +83,15 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=16, seed=None):
             model=model,
             messages=[{"role": "system", "content": SYSTEM_PROMPT},
                       {"role": "user", "content": pack_text}],
-            temperature=0, max_tokens=max_tokens, **kwargs,
+            temperature=0, max_tokens=max_tokens,
+            logprobs=True, top_logprobs=_TOP_LOGPROBS, **kwargs,
         )
     except APIError as e:
-        return -1, f"[api_error] {e}"
-    raw = response.choices[0].message.content or ""
-    return extract_verdict(raw), raw
+        return -1, None, f"[api_error] {e}"
+    choice = response.choices[0]
+    raw = choice.message.content or ""
+    content = getattr(choice.logprobs, "content", None) if choice.logprobs else None
+    if not content:
+        return _hard_parse(raw), None, raw
+    prediction, p_vulnerable = extract_verdict(content[0].top_logprobs)
+    return prediction, p_vulnerable, raw
