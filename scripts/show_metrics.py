@@ -12,7 +12,7 @@ from ockham import solver
 DETECTION = [("pairs", "n_pairs"), ("drop", "n_pairs_dropped_unparsable"),
              ("bkpair", "n_pairs_dropped_backend_failure"),
              ("kept", "n_samples_excluding_backend_failures"),
-             ("unprs", "unparsable_rate"), ("bkfail", "n_backend_failures_rate"),
+             # ("unprs", "unparsable_rate"), ("bkfail", "n_backend_failures_rate"),
              ("pAcc", "pAcc"), ("P-C", "P-C"), ("P-V", "P-V"), ("P-B", "P-B"),
              ("P-R", "P-R"), ("MCC", "MCC"), ("F1", "F1"), ("triv", "F1_trivial"),
              ("recall", "recall"), ("balanced_acc", "balanced_accuracy")]
