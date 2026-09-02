@@ -47,9 +47,19 @@ docker compose build
 Every command above runs unchanged inside the container:
 
 ```bash
-docker compose run --rm ockham python -m ockham.run --selector S5 --representation R0 --limit 6 --no-llm
-docker compose run --rm ockham python scripts/run_experiment.py --phase 1 --out-dir results/exp1 --no-llm
-docker compose run -d --rm ockham python scripts/run_experiment.py --phase 1 --out-dir results/exp1
+docker compose run --rm ockham python -m ockham.run --subsample 60 --seed 0 \
+    --freeze-samples results/exp1/sample_set_60_pairs.json --freeze-only
+
+docker compose run --rm ockham python -m ockham.run --selector S4 --representation R1 --limit 6 --no-llm
+
+docker compose run --rm ockham python scripts/run_experiment.py --phase 1 --repeat 3 --budget 2000 --seed 0 \
+    --sample-set results/exp1/sample_set_60_pairs.json \
+    --model <model> \
+    --base-url <url> \
+    --api-key "$API_KEY" \
+    --out-dir results/exp1
+
+docker compose run --rm ockham python scripts/show_metrics.py results/exp1
 ```
 
 
