@@ -105,6 +105,7 @@ class CellConfig:
     api_key: Optional[str] = None
     no_llm: bool = False
     seed: int = 0
+    replicate: int = 0
     limit: Optional[int] = None
     subsample: Optional[int] = None
     sample_set: Optional[str] = None
@@ -153,7 +154,7 @@ def run_cell(cfg):
         return None
     out_dir = Path(cfg.out_dir) if cfg.out_dir else ROOT / "results"
     out_dir.mkdir(parents=True, exist_ok=True)
-    run_id = f"{cfg.cell_id()}_{time.strftime('%Y%m%d_%H%M%S')}"
+    run_id = f"{cfg.cell_id()}_r{cfg.replicate}_{time.strftime('%Y%m%d_%H%M%S')}"
     out_path = out_dir / f"results_{run_id}.jsonl"
 
     total = len(samples)
@@ -185,6 +186,7 @@ def run_cell(cfg):
                 "run_id": run_id, "sample_set_id": set_id, "selector": cfg.selector,
                 "representation": cfg.representation, "encoding": "text",
                 "budget": cfg.budget, "backend": cfg.backend, "seed": cfg.seed,
+                "replicate": cfg.replicate,
                 "model": cfg.model, "base_url": cfg.base_url,
                 "s2_model": embeddings.MODEL_NAME,
                 "prediction": prediction, "p_vulnerable": p_vulnerable,
