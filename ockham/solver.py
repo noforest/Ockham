@@ -74,7 +74,7 @@ def _hard_parse(text):
     return 1 if side == "V" else 0 if side == "S" else -1
 
 
-def predict(pack_text, model, base_url, api_key=None, max_tokens=16, seed=None):
+def predict(pack_text, model, base_url, api_key=None, max_tokens=8, seed=None):
     """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply), from a single call."""
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
