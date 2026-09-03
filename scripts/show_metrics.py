@@ -31,10 +31,17 @@ COST = [("pack", "mean_pack_tokens"), ("evid", "mean_evidence_tokens"),
 def load_cells(target):
     path = Path(target)
     files = sorted(path.glob("metrics_*.json")) if path.is_dir() else [path]
-    if not files:
-        raise SystemExit(f"no metrics_*.json under {path}")
-    return [(f.name.split("metrics_")[1].rsplit("_", 2)[0], json.loads(f.read_text()))
-            for f in files]
+    cells = []
+    for f in files:
+        try:                              # a killed run leaves a zero-byte metrics file
+            metrics = json.loads(f.read_text())
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"[skip] {f.name}: {e}")
+            continue
+        cells.append((f.name.split("metrics_")[1].rsplit("_", 2)[0], metrics))
+    if not cells:
+        raise SystemExit(f"no readable metrics_*.json under {path}")
+    return cells
 
 
 def show(cells, columns, title, column_width=8):

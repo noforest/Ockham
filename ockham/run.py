@@ -166,10 +166,10 @@ def run_cell(cfg):
             if cfg.show_pack:
                 print(f"\n----- {sample.sample_id} -----\n{pack['pack_text']}")
             if cfg.no_llm:
-                prediction, p_vulnerable, raw, llm_s = -1, None, "[no-llm]", 0.0
+                prediction, p_vulnerable, raw, billed, llm_s = -1, None, "[no-llm]", None, 0.0
             else:
                 t_llm = time.time()
-                prediction, p_vulnerable, raw = solver.predict(
+                prediction, p_vulnerable, raw, billed = solver.predict(
                     pack["pack_text"], cfg.model, cfg.base_url, cfg.api_key, seed=cfg.seed,
                     logprobs=cfg.logprobs, max_tokens=cfg.max_tokens)
                 llm_s = time.time() - t_llm
@@ -194,6 +194,9 @@ def run_cell(cfg):
                 "s2_model": embeddings.MODEL_NAME,
                 "prediction": prediction, "p_vulnerable": p_vulnerable,
                 "model_output_raw": raw, "llm_time_s": llm_s,
+                "billed_prompt_tokens": (billed or {}).get("prompt"),
+                "billed_completion_tokens": (billed or {}).get("completion"),
+                "billed_reasoning_tokens": (billed or {}).get("reasoning"),
                 "target_tokens": C.count_tokens(sample.func_body),
                 "prompt_tokens_total": C.count_tokens(solver.SYSTEM_PROMPT) + pack["pack_tokens"],
                 **{k: v for k, v in pack.items() if k != "pack_text"},
