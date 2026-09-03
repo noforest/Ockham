@@ -1,6 +1,7 @@
 """The shared candidate stage: token counting, the candidate pool and the budget."""
 
 import importlib
+import json
 import re
 import time
 from pathlib import Path
@@ -70,19 +71,38 @@ def ensure_indexed(repo_dir):
 
 
 def build_candidate_pool(sample, repo_dir):
-    """Every indexed function but the target, built at this sample's own commit."""
+    """Every indexed function but the target, cached per worktree since only the checkout matters."""
+    pool = _cached_pool(repo_dir)
     target_name = guess_function_name(sample.func_body)
+    return [c for c in pool if c.name != target_name]
+
+
+def _pool_cache_path(repo_dir):
+    return (Path(repo_dir).parent.parent / "pool_cache" /
+            f"{backend_name()}-{Path(repo_dir).name}.json")
+
+
+def _cached_pool(repo_dir):
+    """The whole checkout's functions, from disk when already walked."""
+    path = _pool_cache_path(repo_dir)
+    if path.exists():
+        try:
+            return [Candidate(**d) for d in json.loads(path.read_text())]
+        except (json.JSONDecodeError, TypeError, OSError):
+            pass          # a half-written cache is rebuilt
     pool = []
-    for name, (path, line) in backend().symbols().items():
-        if name == target_name:
-            continue
+    for name, (file_path, line) in backend().symbols().items():
         source = backend().get_function(name)
         if not source:
             continue
         pool.append(Candidate(
-            name=name, file=_relative(path, repo_dir), line=int(line) if line else 0,
+            name=name, file=_relative(file_path, repo_dir), line=int(line) if line else 0,
             source=source, tokens=count_tokens(source),
         ))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.partial")
+    tmp.write_text(json.dumps([c.__dict__ for c in pool]))
+    tmp.replace(path)     # a killed run must not leave a truncated cache
     return pool
 
 
