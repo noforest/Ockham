@@ -78,7 +78,11 @@ def _hard_parse(text):
 def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOKENS,
             seed=None,
             logprobs=True):
-    """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply), from a single call."""
+    """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply, usage), one call.
+
+    usage is what the API billed, not what tiktoken counted locally: a reasoning model
+    charges tokens that never appear in the reply, so the local estimate understates it.
+    """
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
     if logprobs:
@@ -94,11 +98,23 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOK
             temperature=0, max_tokens=max_tokens, **kwargs,
         )
     except APIError as e:
-        return -1, None, f"[api_error] {e}"
+        return -1, None, f"[api_error] {e}", None
     choice = response.choices[0]
     raw = choice.message.content or ""
     content = getattr(choice.logprobs, "content", None) if choice.logprobs else None
+    billed = _usage(response)
     if not content:
-        return _hard_parse(raw), None, raw
+        return _hard_parse(raw), None, raw, billed
     prediction, p_vulnerable = extract_verdict(content[0].top_logprobs)
-    return prediction, p_vulnerable, raw
+    return prediction, p_vulnerable, raw, billed
+
+
+def _usage(response):
+    """Billed prompt/completion tokens, plus the reasoning share when the API reports it."""
+    u = getattr(response, "usage", None)
+    if u is None:
+        return None
+    details = getattr(u, "completion_tokens_details", None)
+    return {"prompt": getattr(u, "prompt_tokens", None),
+            "completion": getattr(u, "completion_tokens", None),
+            "reasoning": getattr(details, "reasoning_tokens", None) if details else None}
