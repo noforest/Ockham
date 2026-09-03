@@ -5,16 +5,18 @@ import json
 import os
 import time
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Optional
 
 from . import candidates as C
+from . import pricing
 from . import embeddings
 from . import samples as S
 from . import solver
 from .data import checkout, load_pairs
 from .metrics import compute_metrics, load_results
-from .representation import r0_raw, r1_snippets
+from .representation import r0_raw, r1_snippets, r2_callsites
 from .selection import (c0_target_only, c1_same_file, c2_random, s1_bm25, s2_dense,
                         s3_hybrid, s4_callgraph, s5_slice)
 
@@ -28,7 +30,8 @@ SELECTORS = {
     "S4": s4_callgraph.select,
     "S5": s5_slice.select,
 }
-REPRESENTATIONS = {"R0": r0_raw.render, "R1": r1_snippets.render}
+REPRESENTATIONS = {"R0": r0_raw.render, "R1": r1_snippets.render,
+                   "R2": r2_callsites.render}
 
 NEEDS_POOL = {"C1", "C2", "S1", "S2", "S3", "S4", "S5"}
 
@@ -54,25 +57,25 @@ def build_pack(sample, selector_fn, represent_fn, needs_pool, budget):
     t_cold = time.time()
 
     if not needs_pool:
-        pack_text = represent_fn(target, [])
+        pack_text = represent_fn(target, [], target_file=sample.file_name)
         warm_ms = (time.time() - t_cold) * 1000
         return _ledger(pack_text, [], 0, 0.0, warm_ms, warm_ms, 0)
 
     wt = checkout(sample, WORKSPACE)
     if wt is None:
-        pack_text = represent_fn(target, [])       # degrade to target-only
+        pack_text = represent_fn(target, [], target_file=sample.file_name)       # degrade to target-only
         return _ledger(pack_text, [], 0, 0.0, (time.time() - t_cold) * 1000, 0.0, 1)
 
     index_s, n_symbols = C.ensure_indexed(wt)
     if n_symbols == 0:
         # An empty pool would read exactly like a selector finding nothing relevant.
-        pack_text = represent_fn(target, [])
+        pack_text = represent_fn(target, [], target_file=sample.file_name)
         return _ledger(pack_text, [], 0, index_s, (time.time() - t_cold) * 1000, 0.0, 1)
 
     pool = C.build_candidate_pool(sample, wt)
     t_warm = time.time()
     selected = _select_within_budget(selector_fn, sample, pool, budget)
-    pack_text = represent_fn(target, selected)
+    pack_text = represent_fn(target, selected, target_file=sample.file_name)
     warm_ms = (time.time() - t_warm) * 1000
     return _ledger(pack_text, selected, len(pool), index_s,
                    (time.time() - t_cold) * 1000, warm_ms, 0)
@@ -85,6 +88,8 @@ def _ledger(pack_text, selected, pool_n, index_s, cold_ms, warm_ms, backend_fail
         "n_evidence_tokens": sum(c.tokens for c in selected),
         "n_candidates_pool": pool_n,
         "n_candidates_selected": len(selected),
+        # the twin-vs-twin overlap is computed from this offline
+        "evidence_names": [c.name for c in selected],
         "index_time_s": index_s,
         "build_time_cold_ms": cold_ms,
         "build_time_warm_ms": warm_ms,
@@ -107,6 +112,9 @@ class CellConfig:
     logprobs: bool = True
     max_tokens: int = solver.DEFAULT_MAX_TOKENS
     reasoning: Optional[str] = None
+    prompt: str = "v1"
+    provider: Optional[str] = None
+    target_last: bool = False
     seed: int = 0
     replicate: int = 0
     limit: Optional[int] = None
@@ -148,9 +156,18 @@ def resolve_samples(cfg):
 def run_cell(cfg):
     """Execute one cell end to end. Returns the results path."""
     selector_fn = SELECTORS[cfg.selector]
-    represent_fn = REPRESENTATIONS[cfg.representation]
+    represent_fn = partial(REPRESENTATIONS[cfg.representation],
+                           target_last=cfg.target_last)
     needs_pool = cfg.selector in NEEDS_POOL
     C.set_backend(cfg.backend)
+
+    if cfg.prompt == "v2" and cfg.max_tokens == solver.DEFAULT_MAX_TOKENS:
+        # the v1 cap of 8 would truncate every v2 reply before its verdict
+        cfg.max_tokens = solver.V2_MAX_TOKENS
+        print(f"[run] prompt v2: max_tokens raised to {cfg.max_tokens}", flush=True)
+
+    price_in, price_out = ((None, None) if cfg.no_llm else
+                           pricing.rates(cfg.model, cfg.api_key, cfg.provider))
 
     samples, set_id = resolve_samples(cfg)
     if cfg.freeze_only:
@@ -173,7 +190,8 @@ def run_cell(cfg):
                 prediction, p_vulnerable, raw, billed = solver.predict(
                     pack["pack_text"], cfg.model, cfg.base_url, cfg.api_key, seed=cfg.seed,
                     logprobs=cfg.logprobs, max_tokens=cfg.max_tokens,
-                    reasoning=cfg.reasoning)
+                    reasoning=cfg.reasoning, prompt=cfg.prompt,
+                    provider=cfg.provider)
                 llm_s = time.time() - t_llm
 
             pred_str = {1: "VULN", 0: "SAFE", -1: "??"}[prediction]
@@ -194,6 +212,9 @@ def run_cell(cfg):
                 "replicate": cfg.replicate,
                 "model": cfg.model, "base_url": cfg.base_url,
                 "reasoning": cfg.reasoning, "max_tokens": cfg.max_tokens,
+                "prompt": cfg.prompt, "target_last": cfg.target_last,
+                "provider": cfg.provider,
+                "price_in": price_in, "price_out": price_out,
                 "s2_model": embeddings.MODEL_NAME,
                 "prediction": prediction, "p_vulnerable": p_vulnerable,
                 "model_output_raw": raw, "llm_time_s": llm_s,
@@ -201,7 +222,8 @@ def run_cell(cfg):
                 "billed_completion_tokens": (billed or {}).get("completion"),
                 "billed_reasoning_tokens": (billed or {}).get("reasoning"),
                 "target_tokens": C.count_tokens(sample.func_body),
-                "prompt_tokens_total": C.count_tokens(solver.SYSTEM_PROMPT) + pack["pack_tokens"],
+                "prompt_tokens_total": (C.count_tokens(solver.SYSTEM_PROMPTS[cfg.prompt])
+                                        + pack["pack_tokens"]),
                 **{k: v for k, v in pack.items() if k != "pack_text"},
             }
             out.write(json.dumps(record) + "\n")
@@ -230,6 +252,13 @@ def main():
     ap.add_argument("--model", default="google/gemma-3n-e4b-it")
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
     ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
+    ap.add_argument("--provider", default=None,
+                    help="pin one OpenRouter host (no fallback), so a cell is repeatable")
+    ap.add_argument("--prompt", choices=["v1", "v2"], default="v1",
+                    help="v1 verdict on token 0 (logprobs usable); v2 short analysis then "
+                         "VERDICT: on the last line (no logprobs)")
+    ap.add_argument("--target-last", action="store_true",
+                    help="context first, target last with a closing anchor")
     ap.add_argument("--reasoning", choices=["off", "minimal", "low", "medium", "high"],
                     default=None,
                     help="thinking budget on routers that expose one; unset sends nothing")
@@ -261,7 +290,8 @@ def main():
         selector=args.selector, representation=args.representation, budget=args.budget,
         backend=args.backend, data=args.data, model=args.model, base_url=args.base_url,
         logprobs=not args.no_logprobs, max_tokens=args.max_tokens,
-        reasoning=args.reasoning,
+        reasoning=args.reasoning, prompt=args.prompt, provider=args.provider,
+        target_last=args.target_last,
         api_key=args.api_key, no_llm=args.no_llm, seed=args.seed, limit=args.limit,
         subsample=args.subsample, sample_set=args.sample_set,
         freeze_samples=args.freeze_samples, freeze_only=args.freeze_only,

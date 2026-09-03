@@ -17,7 +17,8 @@ DETECTION = [("pairs", "n_pairs"), ("drop", "n_pairs_dropped_unparsable"),
              ("P-R", "P-R"), ("MCC", "MCC"), ("F1", "F1"), ("triv", "F1_trivial"),
              ("recall", "recall"), ("balanced_acc", "balanced_accuracy")]
 
-MODEL, PRICE_IN, PRICE_OUT, MAX_TOKENS = "gemma-4-26b-a4b", 0.042, 0.220, 8
+# Cheapest of nine hosts, so a floor rather than the bill; the real rate is on each row.
+MODEL, PRICE_IN, PRICE_OUT, MAX_TOKENS = "gemma-4-26b-a4b, cheapest host", 0.042, 0.220, 8
 SYS = C.count_tokens(solver.SYSTEM_PROMPT)
 
 USD = [("in_tok", "usd_in_tokens"), ("out_tok", "usd_out_tokens"), ("usd", "usd_total")]
