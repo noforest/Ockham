@@ -70,6 +70,7 @@ def apply(samples, sample_ids):
     by_id = {s.sample_id: s for s in samples}
     missing = [i for i in sample_ids if i not in by_id]
     if missing:
-        raise ValueError(f"{len(missing)} frozen sample ids absent from the pair file, "
-                         f"first few: {missing[:5]}")
+        raise ValueError(f"{len(missing)} frozen sample ids absent from the pair file "
+                         f"(a set frozen before the identical-halves filter: re-freeze "
+                         f"it), first few: {missing[:5]}")
     return [by_id[i] for i in sample_ids]
