@@ -7,3 +7,4 @@ results/
 workspace/
 output/
 .env
+tests/
