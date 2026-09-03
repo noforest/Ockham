@@ -74,20 +74,22 @@ def _hard_parse(text):
     return 1 if side == "V" else 0 if side == "S" else -1
 
 
-def predict(pack_text, model, base_url, api_key=None, max_tokens=8, seed=None):
+def predict(pack_text, model, base_url, api_key=None, max_tokens=8, seed=None,
+            logprobs=True):
     """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply), from a single call."""
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
+    if logprobs:
+        # a router may fall back to a host that drops logprobs and still answer 200;
+        # ignored by endpoints that do not route
+        kwargs.update(logprobs=True, top_logprobs=_TOP_LOGPROBS,
+                      extra_body={"provider": {"require_parameters": True}})
     try:
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "system", "content": SYSTEM_PROMPT},
                       {"role": "user", "content": pack_text}],
-            temperature=0, max_tokens=max_tokens,
-            logprobs=True, top_logprobs=_TOP_LOGPROBS,
-            # a router may fall back to a host that drops logprobs and still
-            # answer 200; ignored by endpoints that do not route
-            extra_body={"provider": {"require_parameters": True}}, **kwargs,
+            temperature=0, max_tokens=max_tokens, **kwargs,
         )
     except APIError as e:
         return -1, None, f"[api_error] {e}"

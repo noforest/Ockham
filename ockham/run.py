@@ -104,6 +104,7 @@ class CellConfig:
     base_url: str = "http://localhost:11434/v1"
     api_key: Optional[str] = None
     no_llm: bool = False
+    logprobs: bool = True
     seed: int = 0
     replicate: int = 0
     limit: Optional[int] = None
@@ -168,7 +169,8 @@ def run_cell(cfg):
             else:
                 t_llm = time.time()
                 prediction, p_vulnerable, raw = solver.predict(
-                    pack["pack_text"], cfg.model, cfg.base_url, cfg.api_key, seed=cfg.seed)
+                    pack["pack_text"], cfg.model, cfg.base_url, cfg.api_key, seed=cfg.seed,
+                    logprobs=cfg.logprobs)
                 llm_s = time.time() - t_llm
 
             pred_str = {1: "VULN", 0: "SAFE", -1: "??"}[prediction]
@@ -221,6 +223,9 @@ def main():
     ap.add_argument("--model", default="google/gemma-3n-e4b-it")
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
     ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
+    ap.add_argument("--no-logprobs", action="store_true",
+                    help="hard verdict only: pAcc/MCC/F1 stay, rank/AUROC/Brier go away. "
+                         "For endpoints with no logprob-capable provider.")
     ap.add_argument("--no-llm", action="store_true",
                     help="skip the detection call: prediction = -1 on every row")
     ap.add_argument("--seed", type=int, default=0)
@@ -242,6 +247,7 @@ def main():
     run_cell(CellConfig(
         selector=args.selector, representation=args.representation, budget=args.budget,
         backend=args.backend, data=args.data, model=args.model, base_url=args.base_url,
+        logprobs=not args.no_logprobs,
         api_key=args.api_key, no_llm=args.no_llm, seed=args.seed, limit=args.limit,
         subsample=args.subsample, sample_set=args.sample_set,
         freeze_samples=args.freeze_samples, freeze_only=args.freeze_only,
