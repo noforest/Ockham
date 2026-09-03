@@ -40,6 +40,7 @@ def select(target, candidates, budget):
                 nxt.append((n, by_name[n].source, by_name[n].file))
         frontier = nxt
 
+    # callees first: a patch changes the target, not who calls it, so callers cannot separate a pair
     ordered = sorted((by_name[n] for n in reached),
-                     key=lambda c: (reached[c.name][0], reached[c.name][1], c.name))
+                     key=lambda c: (reached[c.name][1], reached[c.name][0], c.name))
     return C.enforce_budget(ordered, budget)

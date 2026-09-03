@@ -1,16 +1,14 @@
 """R1: each selected function reduced to its head lines, original numbers kept."""
 
 from .. import syntax
+from .r0_raw import _assemble
 
 
-def render(target_source, evidence):
-    parts = ["=== TARGET FUNCTION ===", target_source.strip()]
-    if evidence:
-        parts.append("\n=== CONTEXT (selected functions, reduced to their relevant lines) ===")
-        parts.append("Original line numbers are preserved; '...' marks elided lines.")
-        for i, c in enumerate(evidence, 1):
-            parts.append(_snippet_block(i, c))
-    return "\n".join(parts)
+def render(target_source, evidence, target_last=False, target_file=None):
+    header = ("=== CONTEXT (selected functions, reduced to their relevant lines) ===\n"
+              "Original line numbers are preserved; '...' marks elided lines.")
+    blocks = [_snippet_block(i, c) for i, c in enumerate(evidence, 1)]
+    return _assemble(target_source, blocks, header, target_last)
 
 
 def _snippet_block(i, c):
