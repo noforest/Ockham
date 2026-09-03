@@ -76,8 +76,7 @@ def _hard_parse(text):
 
 
 def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOKENS,
-            seed=None,
-            logprobs=True):
+            seed=None, logprobs=True, reasoning=None):
     """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply, usage), one call.
 
     usage is what the API billed, not what tiktoken counted locally: a reasoning model
@@ -85,11 +84,19 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOK
     """
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
+    extra = {}
     if logprobs:
         # a router may fall back to a host that drops logprobs and still answer 200;
         # ignored by endpoints that do not route
-        kwargs.update(logprobs=True, top_logprobs=_TOP_LOGPROBS,
-                      extra_body={"provider": {"require_parameters": True}})
+        kwargs.update(logprobs=True, top_logprobs=_TOP_LOGPROBS)
+        extra["provider"] = {"require_parameters": True}
+    if reasoning is not None:
+        # a thinking model spends max_tokens on its reasoning and returns empty content,
+        # which reads as an unparsable reply; "off" makes it answer in one word again
+        extra["reasoning"] = ({"enabled": False} if reasoning == "off"
+                              else {"effort": reasoning})
+    if extra:
+        kwargs["extra_body"] = extra
     try:
         response = client.chat.completions.create(
             model=model,
