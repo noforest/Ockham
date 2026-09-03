@@ -105,6 +105,7 @@ class CellConfig:
     api_key: Optional[str] = None
     no_llm: bool = False
     logprobs: bool = True
+    max_tokens: int = solver.DEFAULT_MAX_TOKENS
     seed: int = 0
     replicate: int = 0
     limit: Optional[int] = None
@@ -170,7 +171,7 @@ def run_cell(cfg):
                 t_llm = time.time()
                 prediction, p_vulnerable, raw = solver.predict(
                     pack["pack_text"], cfg.model, cfg.base_url, cfg.api_key, seed=cfg.seed,
-                    logprobs=cfg.logprobs)
+                    logprobs=cfg.logprobs, max_tokens=cfg.max_tokens)
                 llm_s = time.time() - t_llm
 
             pred_str = {1: "VULN", 0: "SAFE", -1: "??"}[prediction]
@@ -223,6 +224,9 @@ def main():
     ap.add_argument("--model", default="google/gemma-3n-e4b-it")
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
     ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
+    ap.add_argument("--max-tokens", type=int, default=solver.DEFAULT_MAX_TOKENS,
+                    help="reply cap; only the first word is read, but a reasoning model "
+                         "spends its whole budget before emitting a verdict")
     ap.add_argument("--no-logprobs", action="store_true",
                     help="hard verdict only: pAcc/MCC/F1 stay, rank/AUROC/Brier go away. "
                          "For endpoints with no logprob-capable provider.")
@@ -247,7 +251,7 @@ def main():
     run_cell(CellConfig(
         selector=args.selector, representation=args.representation, budget=args.budget,
         backend=args.backend, data=args.data, model=args.model, base_url=args.base_url,
-        logprobs=not args.no_logprobs,
+        logprobs=not args.no_logprobs, max_tokens=args.max_tokens,
         api_key=args.api_key, no_llm=args.no_llm, seed=args.seed, limit=args.limit,
         subsample=args.subsample, sample_set=args.sample_set,
         freeze_samples=args.freeze_samples, freeze_only=args.freeze_only,

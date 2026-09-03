@@ -20,6 +20,7 @@ SYSTEM_PROMPT = (
 )
 
 
+DEFAULT_MAX_TOKENS = 8   # only the first word is read; a reasoning model needs far more
 REQUEST_TIMEOUT_S = 120
 _TOP_LOGPROBS = 5
 
@@ -74,7 +75,8 @@ def _hard_parse(text):
     return 1 if side == "V" else 0 if side == "S" else -1
 
 
-def predict(pack_text, model, base_url, api_key=None, max_tokens=8, seed=None,
+def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOKENS,
+            seed=None,
             logprobs=True):
     """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply), from a single call."""
     client = _get_client(base_url, api_key)
