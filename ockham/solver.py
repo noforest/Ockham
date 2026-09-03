@@ -1,11 +1,12 @@
 """The detection call: one pack in, a verdict and its probability out, both from token 0."""
 
 import math
+import time
 
 from openai import APIError, OpenAI
 
 # The balanced prior holds on a 50/50 set only; drop it on an imbalanced one.
-SYSTEM_PROMPT = (
+_V1 = (
     "Decide whether a C/C++ function contains a vulnerability.\n"
     "The pack has a TARGET FUNCTION (the function to judge) and optionally a CONTEXT "
     "section with selected supporting evidence.\n"
@@ -19,9 +20,36 @@ SYSTEM_PROMPT = (
     "before it, and nothing else. Do not explain."
 )
 
+# v1 buys token-0 logprobs by forbidding any reading; v2 trades p for a short analysis.
+_V2 = (
+    "Decide whether a C/C++ function contains a vulnerability.\n"
+    "The pack has a TARGET FUNCTION (the function to judge) and optionally a CONTEXT "
+    "section with selected supporting evidence: functions the target calls, or that "
+    "call it.\n"
+    "\n"
+    "About half of the functions you are shown are not vulnerable. Use the context to "
+    "decide what the target's calls actually guarantee -- whether a callee validates "
+    "its arguments, bounds a length, or checks a return value. Answer VULNERABLE only "
+    "if you can point to a concrete defect in the TARGET function; answer SAFE "
+    "otherwise, including when the code merely looks risky.\n"
+    "\n"
+    "Write at most three short lines of analysis. Never exceed three lines: a reply "
+    "cut off before its verdict line is discarded. Then give the verdict on its own "
+    "final line, exactly:\n"
+    "VERDICT: VULNERABLE\n"
+    "or\n"
+    "VERDICT: SAFE"
+)
 
-DEFAULT_MAX_TOKENS = 8   # only the first word is read; a reasoning model needs far more
+SYSTEM_PROMPTS = {"v1": _V1, "v2": _V2}
+SYSTEM_PROMPT = _V1          # the default, kept as a name for prompt_tokens_total
+
+
+DEFAULT_MAX_TOKENS = 8    # v1 reads the first word only; a reasoning model needs far more
+V2_MAX_TOKENS = 640       # measured: the model overruns 256 on 9 % of replies
 REQUEST_TIMEOUT_S = 120
+RETRIES = 3               # a 429 is a queue, not a verdict
+RETRY_BACKOFF_S = 4
 _TOP_LOGPROBS = 5
 
 _client = None
@@ -75,8 +103,26 @@ def _hard_parse(text):
     return 1 if side == "V" else 0 if side == "S" else -1
 
 
+def _tail_parse(text):
+    """v2: the verdict is the last VERDICT: line, or failing that the last verdict word."""
+    for line in reversed(text.strip().splitlines()):
+        line = line.strip()
+        if line.upper().startswith("VERDICT"):
+            return _verdict_of(line.split(":", 1)[-1])
+    return _verdict_of(text)
+
+
+def _verdict_of(text):
+    """Last VULNERABLE / SAFE mentioned, so a trailing verdict wins over one in the prose."""
+    up = text.upper()
+    v, sf = up.rfind("VULNERABLE"), up.rfind("SAFE")
+    if v == sf == -1:
+        return -1
+    return 1 if v > sf else 0
+
+
 def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOKENS,
-            seed=None, logprobs=True, reasoning=None):
+            seed=None, logprobs=True, reasoning=None, prompt="v1", provider=None):
     """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply, usage), one call.
 
     usage is what the API billed, not what tiktoken counted locally: a reasoning model
@@ -85,35 +131,49 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOK
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
     extra = {}
+    # Under v2 token 0 is analysis, not the verdict, so its logprobs describe nothing.
+    logprobs = logprobs and prompt == "v1"
     if logprobs:
         # a router may fall back to a host that drops logprobs and still answer 200;
         # ignored by endpoints that do not route
         kwargs.update(logprobs=True, top_logprobs=_TOP_LOGPROBS)
         extra["provider"] = {"require_parameters": True}
     if reasoning is not None:
-        # a thinking model spends max_tokens on its reasoning and returns empty content,
-        # which reads as an unparsable reply; "off" makes it answer in one word again
+        # a thinking model spends max_tokens reasoning and returns empty content
         extra["reasoning"] = ({"enabled": False} if reasoning == "off"
                               else {"effort": reasoning})
+    if provider:
+        # nine hosts at three quantizations: unpinned, temperature 0 still flips ~7 % of verdicts
+        extra.setdefault("provider", {}).update(order=[provider], allow_fallbacks=False)
     if extra:
         kwargs["extra_body"] = extra
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": SYSTEM_PROMPT},
-                      {"role": "user", "content": pack_text}],
-            temperature=0, max_tokens=max_tokens, **kwargs,
-        )
-    except APIError as e:
-        return -1, None, f"[api_error] {e}", None
+    for attempt in range(RETRIES):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "system", "content": SYSTEM_PROMPTS[prompt]},
+                          {"role": "user", "content": pack_text}],
+                temperature=0, max_tokens=max_tokens, **kwargs,
+            )
+            break
+        except APIError as e:
+            # a 429 lands on contiguous stretches, so it must not become a verdict
+            retryable = getattr(e, "status_code", None) in (429, 500, 502, 503, 529)
+            if not retryable or attempt == RETRIES - 1:
+                return -1, None, f"[api_error] {e}", None
+            time.sleep(RETRY_BACKOFF_S * (attempt + 1))
     choice = response.choices[0]
     raw = choice.message.content or ""
     content = getattr(choice.logprobs, "content", None) if choice.logprobs else None
     billed = _usage(response)
-    if not content:
-        return _hard_parse(raw), None, raw, billed
-    prediction, p_vulnerable = extract_verdict(content[0].top_logprobs)
-    return prediction, p_vulnerable, raw, billed
+    if prompt != "v1":
+        return _tail_parse(raw), None, raw, billed
+    if content:
+        prediction, p_vulnerable = extract_verdict(content[0].top_logprobs)
+        if prediction != -1:
+            return prediction, p_vulnerable, raw, billed
+    # logprobs without top_logprobs: the text still holds the verdict, only p is missing
+    return _hard_parse(raw), None, raw, billed
 
 
 def _usage(response):
