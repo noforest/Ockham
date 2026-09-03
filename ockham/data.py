@@ -1,4 +1,4 @@
-"""Loading the pair file: one line becomes two Samples sharing an idx."""
+"""Loading the pair file: one line becomes two Samples sharing an idx, unless they match."""
 
 import json
 import random
@@ -10,6 +10,7 @@ from pathlib import Path
 
 # Some bodies keep the language tag of the markdown fence they were extracted from.
 _FENCE_TAG = re.compile(r"^(c|cpp|cxx|h)\n", re.IGNORECASE)
+_WHITESPACE = re.compile(r"\s+")
 
 GIT_TIMEOUT_S = 300
 
@@ -32,6 +33,11 @@ def _clean_body(body):
     return _FENCE_TAG.sub("", body, count=1).strip()
 
 
+def _same_code(a, b):
+    """True when two halves differ only in whitespace, so no patch separates them."""
+    return _WHITESPACE.sub(" ", a).strip() == _WHITESPACE.sub(" ", b).strip()
+
+
 def load_pairs(path, commit_mode="parent-of-fix"):
     """Explode every pair into its two halves, at the commit the mode selects."""
     with open(path, encoding="utf-8") as f:
@@ -44,8 +50,17 @@ def load_pairs(path, commit_mode="parent-of-fix"):
     rows = list(seen.values())
 
     samples = []
+    n_identical = 0
     for d in rows:
         idx = d["idx"]
+        vuln_body = _clean_body(d["vulnerable_function_body"])
+        benign_body = _clean_body(d["non_vulnerable_function_body"])
+
+        # 146 of 800 pairs hold the same code on both sides: forced P-V/P-B, not a hard case.
+        if _same_code(vuln_body, benign_body):
+            n_identical += 1
+            continue
+
         common = dict(
             pair_id=idx, cve=d["cve"], cwe=d["cwe"],
             project=d["project"], project_url=d["project_url"],
@@ -57,17 +72,18 @@ def load_pairs(path, commit_mode="parent-of-fix"):
         )
         samples.append(Sample(
             sample_id=f"{idx}-vuln", commit=vuln_commit,
-            func_body=_clean_body(d["vulnerable_function_body"]), label=1, **common,
+            func_body=vuln_body, label=1, **common,
         ))
         samples.append(Sample(
             sample_id=f"{idx}-benign", commit=d["vulnerability_fixing_commit_id"],
-            func_body=_clean_body(d["non_vulnerable_function_body"]), label=0, **common,
+            func_body=benign_body, label=0, **common,
         ))
 
     n_vuln = sum(s.label == 1 for s in samples)
     print(f"[data] {len(raw)} lines -> {len(rows)} pairs after idx dedup "
-          f"-> {len(samples)} samples ({n_vuln} vuln / {len(samples) - n_vuln} benign)",
-          flush=True)
+          f"-> {len(rows) - n_identical} pairs after dropping {n_identical} with identical "
+          f"halves -> {len(samples)} samples "
+          f"({n_vuln} vuln / {len(samples) - n_vuln} benign)", flush=True)
     return samples
 
 
