@@ -112,7 +112,7 @@ class CellConfig:
     logprobs: bool = True
     max_tokens: int = solver.DEFAULT_MAX_TOKENS
     reasoning: Optional[str] = None
-    prompt: str = "v1"
+    prompt: str = "v5"
     provider: Optional[str] = None
     target_last: bool = False
     seed: int = 0
@@ -160,11 +160,6 @@ def run_cell(cfg):
                            target_last=cfg.target_last)
     needs_pool = cfg.selector in NEEDS_POOL
     C.set_backend(cfg.backend)
-
-    if cfg.prompt == "v2" and cfg.max_tokens == solver.DEFAULT_MAX_TOKENS:
-        # the v1 cap of 8 would truncate every v2 reply before its verdict
-        cfg.max_tokens = solver.V2_MAX_TOKENS
-        print(f"[run] prompt v2: max_tokens raised to {cfg.max_tokens}", flush=True)
 
     price_in, price_out = ((None, None) if cfg.no_llm else
                            pricing.rates(cfg.model, cfg.api_key, cfg.provider))
@@ -254,9 +249,8 @@ def main():
     ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
     ap.add_argument("--provider", default=None,
                     help="pin one OpenRouter host (no fallback), so a cell is repeatable")
-    ap.add_argument("--prompt", choices=["v1", "v2"], default="v1",
-                    help="v1 verdict on token 0 (logprobs usable); v2 short analysis then "
-                         "VERDICT: on the last line (no logprobs)")
+    ap.add_argument("--prompt", choices=list(solver.SYSTEM_PROMPTS), default="v5",
+                    help="the system prompt; only v5 remains, see solver.py for its sources")
     ap.add_argument("--target-last", action="store_true",
                     help="context first, target last with a closing anchor")
     ap.add_argument("--reasoning", choices=["off", "minimal", "low", "medium", "high"],
