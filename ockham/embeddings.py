@@ -76,7 +76,8 @@ def pool_matrix(candidates):
     missing = [c for c in candidates if _key(c) not in _vectors]
     if missing:
         if len(_vectors) + len(missing) > MAX_CACHED_VECTORS:
-            _vectors.clear()
+            _vectors.clear()      # the clear drops the hits too, so nothing is cached now
+            missing = list(candidates)
         for c, row in zip(missing, encode([c.source for c in missing])):
             _vectors[_key(c)] = row
         _dirty = True
