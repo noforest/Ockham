@@ -131,6 +131,12 @@ def compute_metrics(df):
                {"AUPRC": nan, "AUROC": nan, "Brier": nan, "calibration_error": nan,
                 "n_prob_samples": 0})
     out.update({
+        # what the API billed for the reply: 8 tokens under v1, hundreds under v2/v3
+        "mean_billed_completion_tokens": (float(df.billed_completion_tokens.mean())
+                                          if "billed_completion_tokens" in df else nan),
+        # system prompt + pack: the system half is 120 tokens under v1, 321 under v3
+        "mean_prompt_tokens_total": (float(df.prompt_tokens_total.mean())
+                                     if "prompt_tokens_total" in df else nan),
         "mean_pack_tokens": float(df.pack_tokens.mean()) if len(df) else nan,
         "mean_evidence_tokens": float(df.n_evidence_tokens.mean()) if len(df) else nan,
         "mean_candidates_pool": float(df.n_candidates_pool.mean()) if len(df) else nan,

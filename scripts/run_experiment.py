@@ -37,6 +37,13 @@ def main():
     ap.add_argument("--model", default="google/gemma-3n-e4b-it")
     ap.add_argument("--base-url", default="http://localhost:11434/v1")
     ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
+    ap.add_argument("--prompt", default="v5", help="held constant across the phase, "
+                    "like the backend: it is part of what a cell is compared under")
+    ap.add_argument("--provider", default=None,
+                    help="pin one host for the whole phase; unpinned routing alone flips verdicts")
+    ap.add_argument("--reasoning", choices=["off", "minimal", "low", "medium", "high"],
+                    default=None, help="off on hosts that think by default and would "
+                                       "otherwise spend the reply budget before writing")
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--sample-set", default=None,
                     help="reuse a frozen set; defaults to one inside --out-dir")
@@ -56,7 +63,9 @@ def main():
                     selector=selector, representation=representation, budget=args.budget,
                     backend=args.backend, data=args.data, model=args.model,
                     base_url=args.base_url, api_key=args.api_key, no_llm=args.no_llm,
-                    seed=args.seed, replicate=replicate, sample_set=str(sample_set),
+                    prompt=args.prompt, provider=args.provider, reasoning=args.reasoning,
+                    seed=args.seed, replicate=replicate,
+                    sample_set=str(sample_set),
                     out_dir=out_dir,
                 )
                 tag = f"{cfg.cell_id()} r{replicate}"

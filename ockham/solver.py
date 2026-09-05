@@ -5,48 +5,43 @@ import time
 
 from openai import APIError, OpenAI
 
-# The balanced prior holds on a 50/50 set only; drop it on an imbalanced one.
-_V1 = (
-    "Decide whether a C/C++ function contains a vulnerability.\n"
-    "The pack has a TARGET FUNCTION (the function to judge) and optionally a CONTEXT "
-    "section with selected supporting evidence.\n"
+# The only prompt: one-shot, argued verdict, "VERDICT: <word>" as the last line. Where each
+# clause comes from (papers/ in DEPOT_Contextpack-vuln):
+#   "You are a security reviewer" and the fixed last line with nothing after it -- Chen et al.,
+#     LLM4FPM, arXiv:2411.03079, Fig. 7: "As an expert in C/C++ code review [...] I should
+#     conclude with '@@@ real bug @@@' [...] and include no other output." Form only.
+#   "Reason step by step" -- Wei et al., NeurIPS 2022, via LLM4FPM s.IV.B.2.
+#   "not necessarily related to it" -- irrelevant context distracts: Parasaram et al.,
+#     arXiv:2404.05520; Jia et al., Compressing Code Context for LLM-based Issue Resolution;
+#     Shi et al., LongCodeZip.
+#   No source: "any kind of defect counts" (CWE-agnostic, where LLM4FPM and PacVD both tailor
+#     the prompt per CWE), weighing both verdicts instead of defaulting to one, and the 2560
+#     cap around 2000 announced (_tail_parse needs the verdict line; 2048 lost it 31 % of
+#     the time).
+_V5 = (                                         # 154 tokens (cl100k_base)
+    "You are a security reviewer. You are shown one TARGET FUNCTION to judge, and "
+    "optionally a CONTEXT section of other functions from the same repository, retrieved "
+    "automatically and not necessarily related to it.\n"
     "\n"
-    "About half of the functions you are shown are not vulnerable. Answer VULNERABLE "
-    "only if you can point to a concrete defect in the target function; answer SAFE "
-    "otherwise, including when the code merely looks risky.\n"
+    "Reason step by step, in as much detail as the code needs: what it does, what an "
+    "input can make it do, and what the context settles about it. Any kind of defect "
+    "counts, and no class of defect is more likely than another.\n"
     "\n"
-    "Answer with a single word as the VERY FIRST token of your reply: "
-    "VULNERABLE or SAFE. Output that word first, with no preamble, no punctuation "
-    "before it, and nothing else. Do not explain."
-)
-
-# v1 buys token-0 logprobs by forbidding any reading; v2 trades p for a short analysis.
-_V2 = (
-    "Decide whether a C/C++ function contains a vulnerability.\n"
-    "The pack has a TARGET FUNCTION (the function to judge) and optionally a CONTEXT "
-    "section with selected supporting evidence: functions the target calls, or that "
-    "call it.\n"
-    "\n"
-    "About half of the functions you are shown are not vulnerable. Use the context to "
-    "decide what the target's calls actually guarantee -- whether a callee validates "
-    "its arguments, bounds a length, or checks a return value. Answer VULNERABLE only "
-    "if you can point to a concrete defect in the TARGET function; answer SAFE "
-    "otherwise, including when the code merely looks risky.\n"
-    "\n"
-    "Write at most three short lines of analysis. Never exceed three lines: a reply "
-    "cut off before its verdict line is discarded. Then give the verdict on its own "
-    "final line, exactly:\n"
+    "Weigh both verdicts on the code you can see, then give the one it supports. Use up "
+    "to 2000 tokens for the analysis, then answer: a reply cut off before its verdict is "
+    "discarded. The last line must be exactly:\n"
     "VERDICT: VULNERABLE\n"
     "or\n"
     "VERDICT: SAFE"
 )
 
-SYSTEM_PROMPTS = {"v1": _V1, "v2": _V2}
-SYSTEM_PROMPT = _V1          # the default, kept as a name for prompt_tokens_total
+SYSTEM_PROMPTS = {"v5": _V5}
+SYSTEM_PROMPT = _V5          # kept as a name for prompt_tokens_total
 
 
-DEFAULT_MAX_TOKENS = 8    # v1 reads the first word only; a reasoning model needs far more
-V2_MAX_TOKENS = 640       # measured: the model overruns 256 on 9 % of replies
+# The whole completion, reasoning included: 2000 announced for the analysis, the rest is the
+# verdict line's margin (at 2048 the model overran on 31 % of replies and lost it).
+DEFAULT_MAX_TOKENS = 2560
 REQUEST_TIMEOUT_S = 120
 RETRIES = 3               # a 429 is a queue, not a verdict
 RETRY_BACKOFF_S = 4
@@ -103,13 +98,14 @@ def _hard_parse(text):
     return 1 if side == "V" else 0 if side == "S" else -1
 
 
-def _tail_parse(text):
-    """v2: the verdict is the last VERDICT: line, or failing that the last verdict word."""
+def _tail_parse(text, truncated=False):
+    """v2/v3/v4: the last VERDICT: line; failing that the last verdict word, unless the
+    reply was cut off at max_tokens -- there the word is mid-analysis, not a conclusion."""
     for line in reversed(text.strip().splitlines()):
-        line = line.strip()
+        line = line.strip().strip("*#` ")     # a model that bolds the line still parses
         if line.upper().startswith("VERDICT"):
             return _verdict_of(line.split(":", 1)[-1])
-    return _verdict_of(text)
+    return -1 if truncated else _verdict_of(text)
 
 
 def _verdict_of(text):
@@ -131,8 +127,8 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOK
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
     extra = {}
-    # Under v2 token 0 is analysis, not the verdict, so its logprobs describe nothing.
-    logprobs = logprobs and prompt == "v1"
+    # Token 0 is analysis, not the verdict, so its logprobs would describe nothing.
+    logprobs = False
     if logprobs:
         # a router may fall back to a host that drops logprobs and still answer 200;
         # ignored by endpoints that do not route
@@ -166,14 +162,7 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOK
     raw = choice.message.content or ""
     content = getattr(choice.logprobs, "content", None) if choice.logprobs else None
     billed = _usage(response)
-    if prompt != "v1":
-        return _tail_parse(raw), None, raw, billed
-    if content:
-        prediction, p_vulnerable = extract_verdict(content[0].top_logprobs)
-        if prediction != -1:
-            return prediction, p_vulnerable, raw, billed
-    # logprobs without top_logprobs: the text still holds the verdict, only p is missing
-    return _hard_parse(raw), None, raw, billed
+    return _tail_parse(raw, choice.finish_reason == "length"), None, raw, billed
 
 
 def _usage(response):
