@@ -1,6 +1,10 @@
-"""Compare cells: pAcc, the pair breakdown, cost, McNemar. Replicates are pooled.
+"""Compare cells: pAcc, the pair breakdown, cost. Replicates are pooled.
 
-    python scripts/compare_cells.py results/grid [reference_cell]
+    python scripts/compare_cells.py results/grid                  # the table alone
+    python scripts/compare_cells.py results/grid C0/R0/v1         # + McNemar against C0
+
+McNemar is printed only when a reference cell is named, since it is a claim about two cells
+and not a property of the table.
 """
 
 import json
@@ -59,11 +63,13 @@ def main(directory, ref=None):
         correct[name] = {(i, p): outcome(d) == "P-C"
                          for i, (pairs, _) in enumerate(reps)
                          for p, d in pairs.items() if outcome(d) is not None}
-    ref = ref or next(iter(cells))
-
-    print(f"\nreference McNemar : {ref}      (hasard apparie = 0.250)")
+    if ref:
+        print(f"\nreference McNemar : {ref}      (hasard apparie = 0.250)")
+    else:
+        print("\n(hasard apparie = 0.250)")
     print(f"{'cellule':22} {'rep':>3} {'n':>4} {'pAcc':>6} {'etendue':>13} {'P-C':>4} {'P-V':>4} "
-          f"{'P-B':>4} {'P-R':>4} {'illis':>6} {'usd':>7} {'b':>3} {'c':>3} {'McNemar':>8}")
+          f"{'P-B':>4} {'P-R':>4} {'illis':>6} {'usd':>7}"
+          + (f" {'b':>3} {'c':>3} {'McNemar':>8}" if ref else ""))
     total = 0.0
     for name, reps in cells.items():
         counts, bad, tin, tout, per_rep = {}, 0, 0, 0, []
@@ -87,10 +93,13 @@ def main(directory, ref=None):
                          if r.get("price_out")), None)
         usd = (tin * rate_in + tout * rate_out) if rate_in else float("nan")
         total += usd if usd == usd else 0.0
-        n01, n10, p = mcnemar(correct[ref], correct[name])
-        print(f"{name:22} {len(reps):3d} {n:4d} {pacc:6.3f} {spread:>13} {counts.get('P-C',0):4d} "
-              f"{counts.get('P-V',0):4d} {counts.get('P-B',0):4d} {counts.get('P-R',0):4d} "
-              f"{bad:6d} {usd:7.4f} {n01:3d} {n10:3d} {p:8.3f}")
+        line = (f"{name:22} {len(reps):3d} {n:4d} {pacc:6.3f} {spread:>13} "
+                f"{counts.get('P-C', 0):4d} {counts.get('P-V', 0):4d} "
+                f"{counts.get('P-B', 0):4d} {counts.get('P-R', 0):4d} {bad:6d} {usd:7.4f}")
+        if ref:
+            n01, n10, p = mcnemar(correct[ref], correct[name])
+            line += f" {n01:3d} {n10:3d} {p:8.3f}"
+        print(line)
     print(f"\ntotal facture sur ce dossier : {total:.4f} usd")
     print("etendue = pAcc min et max entre replicats du MEME reglage : tout ecart entre "
           "cellules plus petit que cette largeur n'est pas un resultat.")
