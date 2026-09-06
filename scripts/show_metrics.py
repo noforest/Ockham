@@ -27,7 +27,8 @@ DETECTION = [("pairs", "n_pairs"), ("drop", "n_pairs_dropped_unparsable"),
              ("recall", "recall"), ("balanced_acc", "balanced_accuracy"),]
              # ("AUPRC", "AUPRC"), ("AUROC", "AUROC"), ("Brier", "Brier")]
 
-# Cheapest of nine hosts, so a floor rather than the bill; the real rate is on each row.
+# Fallback only. The real rate and the real token counts are read from
+# results_*.jsonl.
 MODEL, PRICE_IN, PRICE_OUT, MAX_TOKENS = "gemma-4-26b-a4b, cheapest host", 0.042, 0.220, 8
 
 USD = [("in_tok", "usd_in_tokens"), ("out_tok", "usd_out_tokens"), ("usd", "usd_total")]
@@ -74,7 +75,12 @@ def timings(metrics_path):
         return out
     build = sum(r.get("build_time_cold_ms") or 0 for r in rows) / 1000
     llm = float(sum(r.get("llm_time_s") or 0 for r in rows))
-    out.update(build_s=build, llm_s=llm, index_s=index_seconds(rows))
+    out.update(build_s=build, llm_s=llm, index_s=index_seconds(rows),
+               billed_in=sum(r.get("billed_prompt_tokens") or 0 for r in rows),
+               billed_out=sum(r.get("billed_completion_tokens") or 0 for r in rows),
+               model=rows[0].get("model"), provider=rows[0].get("provider"),
+               price_in=next((r["price_in"] for r in rows if r.get("price_in")), None),
+               price_out=next((r["price_out"] for r in rows if r.get("price_out")), None))
     return out
 
 
@@ -120,21 +126,41 @@ def show(cells, columns, title, column_width=8):
 
 
 def usd(m):
-    return (m["usd_in_tokens"] * PRICE_IN + m["usd_out_tokens"] * PRICE_OUT) / 1e6
+    """Per-token rates the run recorded; the cheapest-host constants only as a fallback."""
+    return (m["usd_in_tokens"] * (m.get("price_in") or PRICE_IN / 1e6)
+            + m["usd_out_tokens"] * (m.get("price_out") or PRICE_OUT / 1e6))
 
 
 def with_cost(cells):
+    """Tokens as the host billed them; the local tokenizer only when the rows are gone."""
     for _, m in cells:
         n = m["n_samples"]
-        sent = m.get("mean_prompt_tokens_total")
-        if not (sent and sent == sent):        # a run from before the field existed
-            sent = m["mean_pack_tokens"] + SYSTEM_TOKENS
-        m["usd_in_tokens"] = int(sent * n)
-        # the real reply length when the run recorded it; the v1 cap only as a fallback
-        billed = m.get("mean_billed_completion_tokens")
-        m["usd_out_tokens"] = int((billed if billed and billed == billed else MAX_TOKENS) * n)
+        if m.get("billed_in"):
+            m["usd_in_tokens"], m["usd_out_tokens"] = m["billed_in"], m["billed_out"]
+        else:
+            sent = m.get("mean_prompt_tokens_total")
+            if not (sent and sent == sent):    # a run from before the field existed
+                sent = m["mean_pack_tokens"] + SYSTEM_TOKENS
+            m["usd_in_tokens"] = int(sent * n)
+            # the real reply length when the run recorded it; the v1 cap only as a fallback
+            billed = m.get("mean_billed_completion_tokens")
+            m["usd_out_tokens"] = int(
+                (billed if billed and billed == billed else MAX_TOKENS) * n)
         m["usd_total"] = f"{usd(m):.4f}"
     return cells
+
+
+def price_note(cells):
+    """One line per host actually billed, plus a warning for any cell priced by estimate."""
+    hosts = sorted({(m.get("model"), m.get("provider"), m["price_in"], m["price_out"])
+                    for _, m in cells if m.get("price_in")})
+    lines = [f"  {model} @ {provider}: ${rate_in * 1e6:.4g}/M input, "
+             f"${rate_out * 1e6:.4g}/M output" for model, provider, rate_in, rate_out in hosts]
+    if any(not m.get("billed_in") or not m.get("price_in") for _, m in cells):
+        lines.append(f"  some cells have no billed rows or no recorded rate: those are "
+                     f"ESTIMATED from the local tokenizer at {MODEL}, ${PRICE_IN}/M in, "
+                     f"${PRICE_OUT}/M out")
+    return "\n".join(lines) or "  no rate recorded on any row"
 
 
 def _time_total(cells):
@@ -193,12 +219,13 @@ def main():
          "              sequential and elapsed_s is not that run's duration",
          column_width=11)
     _time_total(cells)
-    show(with_cost(cells),
-         USD,
-         f"price (based on {MODEL}: ${PRICE_IN}/M input, ${PRICE_OUT}/M output)\n"
-         f"  in_tok = mean sent prompt (else pack + {SYSTEM_TOKENS} system) * n_samples\n"
-         f"  out_tok = mean billed reply (else {MAX_TOKENS}) * n_samples\n"
-         f"  usd = in_tok / 1e6 * {PRICE_IN} + out_tok / 1e6 * {PRICE_OUT}",
+    cells = with_cost(cells)
+    show(cells, USD,
+         "price   token counts and rates as the host billed them, from results_*.jsonl\n"
+         + price_note(cells) + "\n"
+         "  in_tok  sum of billed_prompt_tokens: the host's tokenizer, not cl100k_base\n"
+         "  out_tok sum of billed_completion_tokens\n"
+         "  usd     in_tok * price_in + out_tok * price_out, per row",
          column_width=10)
     print(f"\ntotal {sum(usd(m) for _, m in cells):.4f} usd")
 
