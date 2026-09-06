@@ -100,9 +100,9 @@ def main(directory, ref=None):
             n01, n10, p = mcnemar(correct[ref], correct[name])
             line += f" {n01:3d} {n10:3d} {p:8.3f}"
         print(line)
-    print(f"\ntotal facture sur ce dossier : {total:.4f} usd")
-    print("etendue = pAcc min et max entre replicats du MEME reglage : tout ecart entre "
-          "cellules plus petit que cette largeur n'est pas un resultat.")
+    print(f"\ntotal billed for this directory: {total:.4f} usd")
+    print("spread = min and max pAcc across replicates of the SAME setting: any gap "
+          "between cells smaller than that width is not a result.")
 
 
 if __name__ == "__main__":
