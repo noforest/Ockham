@@ -29,6 +29,7 @@ DETECTION = [("pairs", "n_pairs"), ("drop", "n_pairs_dropped_unparsable"),
 
 # Fallback only. The real rate and the real token counts are read from
 # results_*.jsonl.
+
 MODEL, PRICE_IN, PRICE_OUT, MAX_TOKENS = "gemma-4-26b-a4b, cheapest host", 0.042, 0.220, 8
 
 USD = [("in_tok", "usd_in_tokens"), ("out_tok", "usd_out_tokens"), ("usd", "usd_total")]
