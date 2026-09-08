@@ -171,9 +171,10 @@ def run_cell(cfg):
     out_dir.mkdir(parents=True, exist_ok=True)
     run_id = f"{cfg.cell_id()}_r{cfg.replicate}_{time.strftime('%Y%m%d_%H%M%S')}"
     out_path = out_dir / f"results_{run_id}.jsonl"
+    part_path = out_path.with_name(out_path.name + ".partial")
 
     total = len(samples)
-    with open(out_path, "w", encoding="utf-8") as out:
+    with open(part_path, "w", encoding="utf-8") as out:
         for done, sample in enumerate(samples, 1):
             pack = build_pack(sample, selector_fn, represent_fn, needs_pool, cfg.budget)
             if cfg.show_pack:
@@ -223,6 +224,8 @@ def run_cell(cfg):
             }
             out.write(json.dumps(record) + "\n")
             out.flush()
+
+    part_path.replace(out_path)     # the final name means "every sample ran"
 
     print(f"[run] {total} rows ({cfg.cell_id()}, set {set_id}) -> {out_path}", flush=True)
 
