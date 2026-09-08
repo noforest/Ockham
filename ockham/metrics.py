@@ -23,6 +23,12 @@ def load_results(path):
     return pd.read_json(path, lines=True)
 
 
+def _pair_groups(df):
+    """Pairs are keyed within a replicate: pooled replicates would otherwise collide."""
+    keys = ["replicate", "pair_id"] if "replicate" in df else ["pair_id"]
+    return df.groupby(keys)
+
+
 def _pairwise(df):
     """P-C/P-V/P-B/P-R by pair_id; a pair holding an unreadable reply is dropped."""
     counts = {"P-C": 0, "P-V": 0, "P-B": 0, "P-R": 0}
@@ -30,7 +36,7 @@ def _pairwise(df):
     n_dropped = 0
     n_incomplete = 0
     outcome = {(1, 0): "P-C", (1, 1): "P-V", (0, 0): "P-B", (0, 1): "P-R"}
-    for _, group in df.groupby("pair_id"):
+    for _, group in _pair_groups(df):
         vuln = group[group.label == 1]
         benign = group[group.label == 0]
         if len(vuln) != 1 or len(benign) != 1:
@@ -55,7 +61,7 @@ def _pair_rank_acc(df):
     """
     wins = 0.0
     n = 0
-    for _, group in df.groupby("pair_id"):
+    for _, group in _pair_groups(df):
         vuln = group[(group.label == 1) & group.p_vulnerable.notna()]
         benign = group[(group.label == 0) & group.p_vulnerable.notna()]
         if len(vuln) != 1 or len(benign) != 1:
@@ -170,8 +176,8 @@ def cell_key(df):
 
 
 def load_cells(results_dir, pattern="results_*.jsonl"):
-    """Every results file in a directory as {cell_id: (metrics, df, path)}."""
-    cells = {}
+    """Every cell in a directory as {cell_id: (metrics, df, path)}, its replicates pooled."""
+    frames, paths = {}, {}
     for path in sorted(Path(results_dir).glob(pattern)):
         try:
             df = load_results(path)
@@ -180,7 +186,13 @@ def load_cells(results_dir, pattern="results_*.jsonl"):
         if not len(df):
             continue
         sel, rep, budget, arm = cell_key(df)
-        cells[f"{sel}_{rep}_b{budget}_{arm}"] = (compute_metrics(df), df, path)
+        cell_id = f"{sel}_{rep}_b{budget}_{arm}"
+        frames.setdefault(cell_id, []).append(df)
+        paths.setdefault(cell_id, path)
+    cells = {}
+    for cell_id, dfs in frames.items():
+        df = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
+        cells[cell_id] = (compute_metrics(df), df, paths[cell_id])
     return cells
 
 
