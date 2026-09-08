@@ -33,6 +33,10 @@ def phase_cells(phase, selectors, representations, budget):
         if not selectors or not representations:
             sys.exit("--selectors and --representations are required for phase 3: the "
                      "pairs phase 2 promoted, in order")
+        if len(selectors) != len(representations):
+            sys.exit(f"phase 3 pairs --selectors with --representations positionally, so "
+                     f"the two lists must have the same length (got {len(selectors)} and "
+                     f"{len(representations)})")
         validate(selectors, representations)
         return [(s, r, b) for s, r in zip(selectors, representations) for b in EXP3_BUDGETS]
     sys.exit(f"unknown phase {phase}")
