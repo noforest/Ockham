@@ -149,6 +149,19 @@ def compute_metrics(df):
     return out
 
 
+def spread(df, metric="pAcc"):
+    """(mean, std, n) of a metric across a cell's replicates; std is nan when it ran once."""
+    if "replicate" not in df or df.replicate.nunique() < 2:
+        return float("nan"), float("nan"), 1
+    values = [compute_metrics(g)[metric] for _, g in df.groupby("replicate")]
+    values = [v for v in values if v == v]
+    if not values:
+        return float("nan"), float("nan"), 0
+    mean = sum(values) / len(values)
+    var = sum((v - mean) ** 2 for v in values) / len(values)
+    return mean, var ** 0.5, len(values)
+
+
 def cell_key(df):
     """The (selector, representation, budget, backend) identity a results file carries."""
     first = df.iloc[0]
