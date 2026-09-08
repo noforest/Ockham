@@ -14,6 +14,7 @@ from ockham.run import DATA, REPRESENTATIONS, SELECTORS, CellConfig, run_cell
 
 EXP1_SELECTORS = ["C0", "C1", "C2", "S1", "S2", "S3", "S4", "S5"]
 EXP2_REPRESENTATIONS = ["R0", "R1", "R2"]
+EXP3_BUDGETS = [2000, 4000, 8000]
 
 
 def phase_cells(phase, selectors, representations, budget):
@@ -28,6 +29,12 @@ def phase_cells(phase, selectors, representations, budget):
         representations = representations or EXP2_REPRESENTATIONS
         validate(selectors, representations)
         return [(s, r, budget) for s in selectors for r in representations]
+    if phase == 3:
+        if not selectors or not representations:
+            sys.exit("--selectors and --representations are required for phase 3: the "
+                     "pairs phase 2 promoted, in order")
+        validate(selectors, representations)
+        return [(s, r, b) for s, r in zip(selectors, representations) for b in EXP3_BUDGETS]
     sys.exit(f"unknown phase {phase}")
 
 
@@ -51,14 +58,14 @@ def freeze_once(path, data, subsample, seed):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--phase", type=int, choices=[1, 2], default=1)
+    ap.add_argument("--phase", type=int, choices=[1, 2, 3], default=1)
     ap.add_argument("--selectors", nargs="*", default=None,
-                    help="phase 2: the selectors the previous phase promoted")
+                    help="phase 2 and 3: the selectors the previous phase promoted")
     ap.add_argument("--representations", nargs="*", default=None,
-                    help="phase 2: defaults to every representation")
+                    help="phase 2: defaults to every representation; phase 3: one per selector")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--backend", default="ts", help="held constant across the phase")
-    ap.add_argument("--budget", type=int, default=2000)
+    ap.add_argument("--budget", type=int, default=2000, help="phases 1 and 2; phase 3 sweeps its own ladder")
     ap.add_argument("--data", default=str(DATA))
     ap.add_argument("--subsample", type=int, default=20, help="pairs, when freezing")
     ap.add_argument("--seed", type=int, default=0)
