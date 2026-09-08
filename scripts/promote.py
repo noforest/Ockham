@@ -65,6 +65,11 @@ def _cost(v):
     return v if v == v else float("inf")
 
 
+def _plain(v):
+    """A number json can actually write: NaN is what a missing metric holds, and it is not JSON."""
+    return None if v is None or v != v else float(v)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("results_dir")
@@ -102,11 +107,12 @@ def main():
           + " ".join(dict.fromkeys(r["selector"] for r in promoted)))
 
     if args.json:
-        payload = {"results_dir": args.results_dir, "tie_threshold": tie,
-                   "tie_source": tie_src, "floor_c2": floor,
+        payload = {"results_dir": args.results_dir, "tie_threshold": _plain(tie),
+                   "tie_source": tie_src, "floor_c2": _plain(floor),
                    "promoted": [{"cell": r["cell"], "selector": r["selector"],
-                                 "representation": r["representation"], "pAcc": r["pAcc"],
-                                 "evidence_tokens": r["tokens"], "reason": r["why"]}
+                                 "representation": r["representation"],
+                                 "pAcc": _plain(r["pAcc"]),
+                                 "evidence_tokens": _plain(r["tokens"]), "reason": r["why"]}
                                 for r in promoted]}
         Path(args.json).write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(f"[promote] -> {args.json}")
