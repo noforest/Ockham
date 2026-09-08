@@ -12,7 +12,23 @@ from ockham import samples as S
 from ockham.data import load_pairs
 from ockham.run import DATA, REPRESENTATIONS, SELECTORS, CellConfig, run_cell
 
-PHASES = {1: {"representations": ["R0"]}}
+EXP1_SELECTORS = ["C0", "C1", "C2", "S1", "S2", "S3", "S4", "S5"]
+EXP2_REPRESENTATIONS = ["R0", "R1", "R2"]
+
+
+def phase_cells(phase, selectors, representations, budget):
+    """The (selector, representation, budget) triples one phase runs."""
+    if phase == 1:
+        selectors = selectors or EXP1_SELECTORS
+        validate(selectors, ["R0"])
+        return [(s, "R0", budget) for s in selectors]
+    if phase == 2:
+        if not selectors:
+            sys.exit("--selectors is required for phase 2: the ones phase 1 promoted")
+        representations = representations or EXP2_REPRESENTATIONS
+        validate(selectors, representations)
+        return [(s, r, budget) for s in selectors for r in representations]
+    sys.exit(f"unknown phase {phase}")
 
 
 def validate(selectors, representations):
@@ -35,9 +51,11 @@ def freeze_once(path, data, subsample, seed):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--phase", type=int, choices=sorted(PHASES), default=1)
-    ap.add_argument("--selectors", nargs="+",
-                    default=["C0", "C1", "C2", "S1", "S2", "S3", "S4", "S5"])
+    ap.add_argument("--phase", type=int, choices=[1, 2], default=1)
+    ap.add_argument("--selectors", nargs="*", default=None,
+                    help="phase 2: the selectors the previous phase promoted")
+    ap.add_argument("--representations", nargs="*", default=None,
+                    help="phase 2: defaults to every representation")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--backend", default="ts", help="held constant across the phase")
     ap.add_argument("--budget", type=int, default=2000)
@@ -60,34 +78,34 @@ def main():
     ap.add_argument("--out-dir", default=None)
     args = ap.parse_args()
 
-    validate(args.selectors, PHASES[args.phase]["representations"])
+    cells = phase_cells(args.phase, args.selectors, args.representations, args.budget)
 
     out_dir = Path(args.out_dir) if args.out_dir else ROOT / "results" / f"exp{args.phase}"
     out_dir.mkdir(parents=True, exist_ok=True)
     sample_set = Path(args.sample_set) if args.sample_set else out_dir / "sample_set.json"
     freeze_once(sample_set, args.data, args.subsample, args.seed)
 
+    print(f"[phase] {len(cells)} cells x {args.repeat} -> {out_dir}", flush=True)
     summary = []
     for replicate in range(args.repeat):
-        for selector in args.selectors:
-            for representation in PHASES[args.phase]["representations"]:
-                cfg = CellConfig(
-                    selector=selector, representation=representation, budget=args.budget,
-                    backend=args.backend, data=args.data, model=args.model,
-                    base_url=args.base_url, api_key=args.api_key, no_llm=args.no_llm,
-                    prompt=args.prompt, provider=args.provider, reasoning=args.reasoning,
-                    seed=args.seed, replicate=replicate,
-                    sample_set=str(sample_set),
-                    out_dir=out_dir,
-                )
-                tag = f"{cfg.cell_id()} r{replicate}"
-                done = list(out_dir.glob(f"results_{cfg.cell_id()}_r{replicate}_*.jsonl"))
-                if done:
-                    print(f"[phase] skip {tag}, results already at {done[-1].name}")
-                    continue
-                print(f"[phase] {tag}")
-                _path, metrics = run_cell(cfg)
-                summary.append((tag, metrics))
+        for selector, representation, budget in cells:
+            cfg = CellConfig(
+                selector=selector, representation=representation, budget=budget,
+                backend=args.backend, data=args.data, model=args.model,
+                base_url=args.base_url, api_key=args.api_key, no_llm=args.no_llm,
+                prompt=args.prompt, provider=args.provider, reasoning=args.reasoning,
+                seed=args.seed, replicate=replicate,
+                sample_set=str(sample_set),
+                out_dir=out_dir,
+            )
+            tag = f"{cfg.cell_id()} r{replicate}"
+            done = list(out_dir.glob(f"results_{cfg.cell_id()}_r{replicate}_*.jsonl"))
+            if done:
+                print(f"[phase] skip {tag}, results already at {done[-1].name}")
+                continue
+            print(f"[phase] {tag}")
+            _path, metrics = run_cell(cfg)
+            summary.append((tag, metrics))
 
     for cell_id, m in summary:
         print(f"[phase] {cell_id}: pAcc={m['pAcc']} MCC={m['MCC']} "
