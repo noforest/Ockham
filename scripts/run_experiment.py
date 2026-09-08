@@ -8,9 +8,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from validity_checks import GATES, by_selector
 
 from ockham import samples as S
 from ockham.data import load_pairs
+from ockham.metrics import load_cells
 from ockham.run import DATA, REPRESENTATIONS, SELECTORS, CellConfig, run_cell
 
 EXP1_SELECTORS = ["C0", "C1", "C2", "S1", "S2", "S3", "S4", "S5"]
@@ -134,6 +138,20 @@ def main():
         print(f"[phase] {cell_id}: pAcc={m['pAcc']} MCC={m['MCC']} "
               f"F1={m['F1']} (trivial {m['F1_trivial']}) "
               f"pack_tokens={m['mean_pack_tokens']:.0f}")
+
+    run_gates(out_dir)
+
+
+def run_gates(out_dir):
+    """The validity gates over what the phase wrote, so a bad phase says so on its own."""
+    cells = load_cells(out_dir)
+    if not cells:
+        return
+    print(f"\n[gates] {len(cells)} cells in {out_dir}")
+    pacc = by_selector(cells)
+    for name, gate in GATES:
+        status, detail = gate(cells, pacc)
+        print(f"  [{status}] {name}: {detail}", flush=True)
 
 
 if __name__ == "__main__":

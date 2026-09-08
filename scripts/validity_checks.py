@@ -23,7 +23,7 @@ def _val(v):
     return None if v is None or v != v else v
 
 
-def _by_selector(cells, metric="pAcc"):
+def by_selector(cells, metric="pAcc"):
     out = {}
     for cell_id, (metrics, _df, _p) in cells.items():
         out.setdefault(cell_id.split("_")[0], _val(metrics.get(metric)))
@@ -34,7 +34,7 @@ def contamination(cells, pacc):
     """C0 carries no context, so a high score there is memorisation rather than detection."""
     c0 = pacc.get("C0")
     if c0 is None:
-        return "SKIP", "needs a C0 cell"
+        return "SKIP", "needs a C0 cell with a score"
     if c0 > MAX_C0_PACC:
         return "FAIL", f"C0 pAcc {_fmt(c0)} > {MAX_C0_PACC} with no context at all"
     return "PASS", f"C0 pAcc {_fmt(c0)} <= {MAX_C0_PACC}"
@@ -44,7 +44,7 @@ def random_control(cells, pacc):
     """A selector that does not beat C2 fills the budget rather than selecting."""
     c2 = pacc.get("C2")
     if c2 is None:
-        return "SKIP", "needs a C2 cell"
+        return "SKIP", "needs a C2 cell with a score"
     below = sorted(s for s, v in pacc.items()
                    if s not in CONTROLS and v is not None and v <= c2)
     if below:
@@ -87,7 +87,7 @@ def main():
         sys.exit(f"no results found in {args.results_dir}")
 
     print(f"Validity checks over {len(cells)} cells in {args.results_dir}\n")
-    pacc = _by_selector(cells)
+    pacc = by_selector(cells)
     failed = 0
     for name, gate in GATES:
         status, detail = gate(cells, pacc)
