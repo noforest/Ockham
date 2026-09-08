@@ -3,6 +3,7 @@
 import argparse
 import os
 import sys
+import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -84,6 +85,8 @@ def main():
                     default=None, help="off on hosts that think by default and would "
                                        "otherwise spend the reply budget before writing")
     ap.add_argument("--no-llm", action="store_true")
+    ap.add_argument("--force", action="store_true",
+                    help="rerun cells whose results are already on disk")
     ap.add_argument("--sample-set", default=None,
                     help="reuse a frozen set; defaults to one inside --out-dir")
     ap.add_argument("--out-dir", default=None)
@@ -97,7 +100,7 @@ def main():
     freeze_once(sample_set, args.data, args.subsample, args.seed)
 
     print(f"[phase] {len(cells)} cells x {args.repeat} -> {out_dir}", flush=True)
-    summary = []
+    summary, failed = [], []
     for replicate in range(args.repeat):
         for selector, representation, budget in cells:
             cfg = CellConfig(
@@ -111,13 +114,25 @@ def main():
             )
             tag = f"{cfg.cell_id()} r{replicate}"
             done = list(out_dir.glob(f"results_{cfg.cell_id()}_r{replicate}_*.jsonl"))
-            if done:
+            if done and not args.force:
                 print(f"[phase] skip {tag}, results already at {done[-1].name}")
                 continue
             print(f"[phase] {tag}")
-            _path, metrics = run_cell(cfg)
+            try:
+                _path, metrics = run_cell(cfg)
+            except Exception as e:                                      # noqa: BLE001
+                # An API timeout or a repository that will not clone kills one cell; the
+                # other fifteen are worth more than a clean stack trace. Rerunning the
+                # phase retries exactly this cell, since finished ones are skipped.
+                print(f"[phase] ERROR {tag}: {type(e).__name__}: {e}", flush=True)
+                traceback.print_exc()
+                failed.append(f"{tag} ({type(e).__name__})")
+                continue
             summary.append((tag, metrics))
 
+    print(f"\n[phase] {len(summary)} run, {len(failed)} unavailable", flush=True)
+    for f in failed:
+        print(f"  unavailable: {f}", flush=True)
     for cell_id, m in summary:
         print(f"[phase] {cell_id}: pAcc={m['pAcc']} MCC={m['MCC']} "
               f"F1={m['F1']} (trivial {m['F1_trivial']}) "
