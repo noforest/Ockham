@@ -10,9 +10,19 @@ sys.path.insert(0, str(ROOT))
 
 from ockham import samples as S
 from ockham.data import load_pairs
-from ockham.run import DATA, CellConfig, run_cell
+from ockham.run import DATA, REPRESENTATIONS, SELECTORS, CellConfig, run_cell
 
 PHASES = {1: {"representations": ["R0"]}}
+
+
+def validate(selectors, representations):
+    """Reject unknown ids before a cell runs, since a typo would only shrink the grid."""
+    for ids, known, what in ((selectors, SELECTORS, "selector"),
+                             (representations, REPRESENTATIONS, "representation")):
+        unknown = [i for i in ids if i not in known]
+        if unknown:
+            sys.exit(f"unknown {what}(s): {', '.join(unknown)}. "
+                     f"Known: {', '.join(sorted(known))}")
 
 
 def freeze_once(path, data, subsample, seed):
@@ -49,6 +59,8 @@ def main():
                     help="reuse a frozen set; defaults to one inside --out-dir")
     ap.add_argument("--out-dir", default=None)
     args = ap.parse_args()
+
+    validate(args.selectors, PHASES[args.phase]["representations"])
 
     out_dir = Path(args.out_dir) if args.out_dir else ROOT / "results" / f"exp{args.phase}"
     out_dir.mkdir(parents=True, exist_ok=True)
