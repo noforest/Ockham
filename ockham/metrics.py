@@ -52,13 +52,7 @@ def _pairwise(df):
 
 
 def _pair_rank_acc(df):
-    """Share of pairs whose vulnerable member gets the higher probability; ties count half.
-
-    A ranking measure reported next to pAcc, never a decision rule. Turning it into one --
-    forcing the less-probable member of a both-vulnerable pair to safe -- would state that
-    exactly one of the two is vulnerable, which is a property of how the set is built and
-    not something a detector is given.
-    """
+    """Share of pairs whose vulnerable member gets the higher probability; ties count half."""
     wins = 0.0
     n = 0
     for _, group in _pair_groups(df):

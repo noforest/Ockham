@@ -14,19 +14,19 @@ BACKENDS = ("ts", "joern")
 
 _backend_name = "ts"
 _BACKEND = None
-_indexed = set()      # (backend, worktree) pairs already indexed
+_current = None       # (backend, worktree) the backend's symbol table describes now
 _index_times = {}     # -> seconds spent on the first index build
 _index_counts = {}    # -> symbols found; 0 means the backend failed
 
 
 def set_backend(which):
     """Select the backend every later query goes through."""
-    global _backend_name, _BACKEND
+    global _backend_name, _BACKEND, _current
     if which not in BACKENDS:
         raise ValueError(f"unknown backend {which!r}, expected one of {list(BACKENDS)}")
     _backend_name = which
     _BACKEND = None
-    _indexed.clear()
+    _current = None
     return backend()
 
 
@@ -59,14 +59,14 @@ def guess_function_name(body):
 
 
 def ensure_indexed(repo_dir):
-    """Index a checkout once per backend: (index_time_s, n_symbols), 0 meaning it failed."""
+    """Index a checkout, again when the backend has moved to another one since."""
+    global _current
     key = (_backend_name, str(repo_dir))
-    if key not in _indexed:
+    if _current != key:
         t0 = time.time()
-        n = backend().index(repo_dir)
-        _indexed.add(key)
-        _index_times.setdefault(key, time.time() - t0)
-        _index_counts[key] = n
+        _index_counts[key] = backend().index(repo_dir)
+        _index_times.setdefault(key, time.time() - t0)      # the cold cost of this checkout
+        _current = key
     return _index_times.get(key, 0.0), _index_counts.get(key, 0)
 
 
