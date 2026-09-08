@@ -44,7 +44,7 @@ def phase_cells(phase, selectors, representations, budget):
 
 
 def validate(selectors, representations):
-    """Reject unknown ids before a cell runs, since a typo would only shrink the grid."""
+    """Reject unknown ids before any cell runs."""
     for ids, known, what in ((selectors, SELECTORS, "selector"),
                              (representations, REPRESENTATIONS, "representation")):
         unknown = [i for i in ids if i not in known]
@@ -121,9 +121,6 @@ def main():
             try:
                 _path, metrics = run_cell(cfg)
             except Exception as e:                                      # noqa: BLE001
-                # An API timeout or a repository that will not clone kills one cell; the
-                # other fifteen are worth more than a clean stack trace. Rerunning the
-                # phase retries exactly this cell, since finished ones are skipped.
                 print(f"[phase] ERROR {tag}: {type(e).__name__}: {e}", flush=True)
                 traceback.print_exc()
                 failed.append(f"{tag} ({type(e).__name__})")

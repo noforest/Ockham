@@ -225,7 +225,7 @@ def run_cell(cfg):
             out.write(json.dumps(record) + "\n")
             out.flush()
 
-    part_path.replace(out_path)     # the final name means "every sample ran"
+    part_path.replace(out_path)     # the final name means the cell finished
 
     print(f"[run] {total} rows ({cfg.cell_id()}, set {set_id}) -> {out_path}", flush=True)
 
