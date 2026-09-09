@@ -1,19 +1,19 @@
 """The shared candidate stage: token counting, the candidate pool and the budget."""
 
-import importlib
 import json
 import re
 import time
 from pathlib import Path
 
+from . import backend_joern, backend_ts
 from .pack import Candidate
 
 _FUNC_NAME_RE = re.compile(r"([A-Za-z_]\w*)\s*\(")
 
-BACKENDS = ("ts", "joern")
+_MODULES = {"ts": backend_ts, "joern": backend_joern}
+BACKENDS = tuple(_MODULES)
 
 _backend_name = "ts"
-_BACKEND = None
 _current = None       # (backend, worktree) the backend's symbol table describes now
 _from_cache = False   # did the last index build read the backend's disk cache?
 _index_times = {}     # -> seconds spent on the first index build
@@ -22,21 +22,17 @@ _index_counts = {}    # -> symbols found; 0 means the backend failed
 
 def set_backend(which):
     """Select the backend every later query goes through."""
-    global _backend_name, _BACKEND, _current
+    global _backend_name, _current
     if which not in BACKENDS:
         raise ValueError(f"unknown backend {which!r}, expected one of {list(BACKENDS)}")
     _backend_name = which
-    _BACKEND = None
     _current = None
     return backend()
 
 
 def backend():
     """The backend module currently selected."""
-    global _BACKEND
-    if _BACKEND is None:
-        _BACKEND = importlib.import_module(f".backend_{_backend_name}", __package__)
-    return _BACKEND
+    return _MODULES[_backend_name]
 
 
 def backend_name():
