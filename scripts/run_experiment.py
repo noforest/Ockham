@@ -18,7 +18,7 @@ from ockham.metrics import load_cells
 from ockham.run import DATA, REPRESENTATIONS, SELECTORS, CellConfig, run_cell
 
 EXP1_SELECTORS = ["C0", "C1", "C2", "S1", "S2", "S3", "S4", "S5"]
-EXP2_REPRESENTATIONS = ["R0", "R1", "R2"]
+EXP2_REPRESENTATIONS = ["R0", "R1", "R2", "R3", "R4"]
 EXP3_BUDGETS = [2000, 4000, 8000]
 
 
