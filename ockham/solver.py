@@ -16,7 +16,7 @@ _V5 = (                                         # 154 tokens (cl100k_base)
     "counts, and no class of defect is more likely than another.\n"
     "\n"
     "Weigh both verdicts on the code you can see, then give the one it supports. Use up "
-    "to 2000 tokens for the analysis, then answer: a reply cut off before its verdict is "
+    "to 1750 tokens for the analysis, then answer: a reply cut off before its verdict is "
     "discarded. The last line must be exactly:\n"
     "VERDICT: VULNERABLE\n"
     "or\n"
