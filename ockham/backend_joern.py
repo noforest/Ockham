@@ -14,22 +14,28 @@ PARSE_TIMEOUT_S = 900
 QUERY_TIMEOUT_S = 600
 
 _symbols = {}       # name -> (filename, line), first definition wins as in backend_ts
-_source = {}        # name -> the method's source
+_ranges = {}        # name -> (filename, first line, last line), 1-indexed and inclusive
 _calls = {}         # name -> [CallSite]
 _identifiers = {}   # name -> frozenset[str]
 _keep = {}          # name -> frozenset[int], rows relative to the method's first line
+_repo_dir = None    # the checkout the tables describe, for resolving filenames
+_file_lines = {}    # resolved path -> the file's lines, read once
 
 
-def _load(methods):
+def _load(methods, repo_dir=None):
     """Fill the tables from the dump payload."""
-    global _symbols, _source, _calls, _identifiers, _keep
-    _symbols, _source, _calls, _identifiers, _keep = {}, {}, {}, {}, {}
+    global _symbols, _ranges, _calls, _identifiers, _keep, _repo_dir, _file_lines
+    _symbols, _ranges, _calls, _identifiers, _keep = {}, {}, {}, {}, {}
+    _repo_dir = Path(repo_dir).resolve() if repo_dir else None
+    _file_lines = {}
     for m in methods:
         name = m["name"]
         if name in _symbols:
             continue
-        _symbols[name] = (m.get("filename", ""), int(m.get("lineNumber") or 0))
-        _source[name] = m.get("code") or ""
+        filename = m.get("filename", "")
+        start = int(m.get("lineNumber") or 0)
+        _symbols[name] = (filename, start)
+        _ranges[name] = (filename, start, int(m.get("lineNumberEnd") or start))
         _calls[name] = [CallSite(c["name"], list(c.get("conditions", [])))
                         for c in m.get("calls", [])]
         _identifiers[name] = frozenset(m.get("identifiers", []))
@@ -75,8 +81,8 @@ def index(repo_dir):
     t0 = time.time()
     methods = _build_dump(repo_dir)
     if methods is None:
-        return _load([])
-    n = _load(methods)
+        return _load([], repo_dir)
+    n = _load(methods, repo_dir)
     print(f"[joern] indexed {n} methods ({time.time() - t0:.0f}s)", flush=True)
     return n
 
@@ -86,8 +92,30 @@ def symbols():
     return dict(_symbols)
 
 
+def _lines_of(filename):
+    """The file's lines, read once; a Joern filename may be relative or absolute."""
+    path = Path(filename)
+    if not path.is_absolute() and _repo_dir is not None:
+        path = _repo_dir / path
+    key = str(path)
+    if key not in _file_lines:
+        try:
+            _file_lines[key] = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except OSError:
+            _file_lines[key] = []
+    return _file_lines[key]
+
+
 def get_function(name):
-    return _source.get(name) or None
+    """The source sliced out of the file by the CPG line range, never the truncated code."""
+    entry = _ranges.get(name)
+    if entry is None:
+        return None
+    filename, start, end = entry
+    lines = _lines_of(filename)
+    if not lines or start <= 0:
+        return None
+    return "\n".join(lines[start - 1:max(end, start)]) or None
 
 
 def get_calls(name):

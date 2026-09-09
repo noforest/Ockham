@@ -55,6 +55,9 @@ def isKeptNode(n: AstNode): Boolean = n.label match {
 
   val out = methods.map { m =>
     val base = m.lineNumber.map(_.toInt).getOrElse(0)
+    // The line range, never METHOD.code: Joern truncates that and the arm would score
+    // half a body against the other arm's whole one.
+    val endLine = m.lineNumberEnd.map(_.toInt).getOrElse(base)
 
     val calls = m.call.filterNot(_.name.startsWith("<")).map { c =>
       val conds = ancestorConditions(c)
@@ -74,7 +77,7 @@ def isKeptNode(n: AstNode): Boolean = n.label match {
     s"""{"name":"${esc(m.name)}",""" +
       s""""filename":"${esc(m.filename)}",""" +
       s""""lineNumber":$base,""" +
-      s""""code":"${esc(m.code)}",""" +
+      s""""lineNumberEnd":$endLine,""" +
       s""""calls":[${calls.mkString(",")}],""" +
       s""""identifiers":[${jsonStrList(idents)}],""" +
       s""""keepLines":[${keep.mkString(",")}]}"""
