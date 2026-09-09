@@ -16,7 +16,7 @@ from . import samples as S
 from . import solver
 from .data import checkout, load_pairs
 from .metrics import compute_metrics, load_results
-from .representation import r0_raw, r1_snippets, r2_callsites
+from .representation import r0_raw, r1_snippets, r2_callsites, r3_json
 from .selection import (c0_target_only, c1_same_file, c2_random, s1_bm25, s2_dense,
                         s3_hybrid, s4_callgraph, s5_slice)
 
@@ -31,7 +31,7 @@ SELECTORS = {
     "S5": s5_slice.select,
 }
 REPRESENTATIONS = {"R0": r0_raw.render, "R1": r1_snippets.render,
-                   "R2": r2_callsites.render}
+                   "R2": r2_callsites.render, "R3": r3_json.render}
 
 NEEDS_POOL = {"C1", "C2", "S1", "S2", "S3", "S4", "S5"}
 
