@@ -86,7 +86,7 @@ def main():
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    _log_path = out / f"run_all_{time.strftime('%Y%m%d_%H%M%S')}.log"
+    _log_path = out / f"console_output_{time.strftime('%Y%m%d_%H%M%S')}.log"
     started = time.time()
 
     if not args.no_llm and not args.api_key:

@@ -54,7 +54,7 @@ python scripts/show_log.py <phase-dir>/logs/log_S4_R0_b2000_ts_r0_*.jsonl 1442-v
 
 Every phase writes `<phase-dir>/logs/log_<run_id>.jsonl`, one JSON object per model call:
 system prompt, the pack sent, the full reply, `finish_reason` and every parameter.
-`<out-dir>/run_all_*.log` is a different thing, the console transcript of the driver.
+`<out-dir>/console_output_*.log` is a different thing, the driver's console transcript.
 
 ### What `run_all.py` does
 
@@ -74,7 +74,7 @@ system prompt, the pack sent, the full reply, `finish_reason` and every paramete
    promotion again, keeping the top `--top2` (selector, representation) pairs.
 6. **Phase 3:** those pairs x budgets 2000 / 4000 / 8000, into `exp3/`.
 7. **Summary:** cells and gate state per phase; everything is also in
-   `<out-dir>/run_all_*.log`.
+   `<out-dir>/console_output_*.log`.
 
 Rerunning the same command resumes: finished cells are skipped.
 
