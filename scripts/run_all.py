@@ -63,6 +63,12 @@ def main():
     ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
     ap.add_argument("--provider", default=None)
     ap.add_argument("--prompt", default="v5")
+    ap.add_argument("--reasoning", choices=["off", "minimal", "low", "medium", "high"],
+                    default=None, help="off on hosts that think by default")
+    ap.add_argument("--max-tokens", type=int, default=None)
+    ap.add_argument("--target-last", action="store_true")
+    ap.add_argument("--data", default=None)
+    ap.add_argument("--force", action="store_true", help="rerun cells that already have results")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--top1", type=int, default=3, help="selectors promoted out of phase 1")
@@ -95,6 +101,16 @@ def main():
         common += ["--api-key", args.api_key]
     if args.provider:
         common += ["--provider", args.provider]
+    if args.reasoning:
+        common += ["--reasoning", args.reasoning]
+    if args.max_tokens:
+        common += ["--max-tokens", args.max_tokens]
+    if args.target_last:
+        common += ["--target-last"]
+    if args.data:
+        common += ["--data", args.data]
+    if args.force:
+        common += ["--force"]
     if args.no_llm:
         common += ["--no-llm"]
 

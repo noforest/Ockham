@@ -15,6 +15,7 @@ from validity_checks import GATES, by_selector
 from ockham import samples as S
 from ockham.data import load_pairs
 from ockham.metrics import load_cells
+from ockham import solver
 from ockham.run import DATA, REPRESENTATIONS, SELECTORS, CellConfig, run_cell
 
 EXP1_SELECTORS = ["C0", "C1", "C2", "S1", "S2", "S3", "S4", "S5"]
@@ -88,6 +89,9 @@ def main():
     ap.add_argument("--reasoning", choices=["off", "minimal", "low", "medium", "high"],
                     default=None, help="off on hosts that think by default and would "
                                        "otherwise spend the reply budget before writing")
+    ap.add_argument("--max-tokens", type=int, default=solver.DEFAULT_MAX_TOKENS)
+    ap.add_argument("--target-last", action="store_true",
+                    help="context first, target last, held constant across the phase")
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--force", action="store_true",
                     help="rerun cells whose results are already on disk")
@@ -112,6 +116,7 @@ def main():
                 backend=args.backend, data=args.data, model=args.model,
                 base_url=args.base_url, api_key=args.api_key, no_llm=args.no_llm,
                 prompt=args.prompt, provider=args.provider, reasoning=args.reasoning,
+                max_tokens=args.max_tokens, target_last=args.target_last,
                 seed=args.seed, replicate=replicate,
                 sample_set=str(sample_set),
                 out_dir=out_dir,
