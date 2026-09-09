@@ -12,7 +12,8 @@ def render(target_source, evidence, target_last=False, target_file=None):
     if not evidence:
         return _assemble(target_source, [], HEADER, target_last)
     target_name = C.guess_function_name(target_source) or "target"
-    direct, by_callee, _ = abstraction.callee_breakdown(C.backend(), target_name)
+    backend = syntax.EvidenceBackend(target_name, target_source, evidence)
+    direct, by_callee, _ = abstraction.callee_breakdown(backend, target_name)
     where = {c.name: (c.file, c.line) for c in evidence}
     return _assemble(target_source, [_body(direct, by_callee, where, len(evidence))],
                      HEADER, target_last)

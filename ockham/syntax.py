@@ -63,3 +63,20 @@ def keep_lines(name, source=None, filename=None):
 def primitives(name, source=None, filename=None):
     """The primitive operations this body calls directly."""
     return called_names(name, source, filename) & PRIMITIVE_APIS
+
+
+class EvidenceBackend:
+    """The get_function / get_calls convention, served from the kept evidence only."""
+
+    def __init__(self, target_name, target_source, evidence):
+        self.source = {c.name: c.source for c in evidence}
+        self.source[target_name] = target_source
+        self.file = {c.name: c.file for c in evidence}
+        self.line = {c.name: c.line for c in evidence}
+
+    def get_function(self, name):
+        return self.source.get(name)
+
+    def get_calls(self, name):
+        src = self.source.get(name)
+        return [] if src is None else calls(name, src, self.file.get(name))
