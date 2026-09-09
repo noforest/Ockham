@@ -100,7 +100,7 @@ def _verdict_of(text):
 
 def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOKENS,
             seed=None, logprobs=True, reasoning=None, prompt="v1", provider=None):
-    """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply, billed usage), one call."""
+    """(prediction, p_vulnerable, raw reply, billed usage, finish_reason), one call."""
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
     extra = {}
@@ -132,13 +132,14 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOK
             # a 429 lands on contiguous stretches, so it must not become a verdict
             retryable = getattr(e, "status_code", None) in (429, 500, 502, 503, 529)
             if not retryable or attempt == RETRIES - 1:
-                return -1, None, f"[api_error] {e}", None
+                return -1, None, f"[api_error] {e}", None, "error"
             time.sleep(RETRY_BACKOFF_S * (attempt + 1))
     choice = response.choices[0]
     raw = choice.message.content or ""
     content = getattr(choice.logprobs, "content", None) if choice.logprobs else None
     billed = _usage(response)
-    return _tail_parse(raw, choice.finish_reason == "length"), None, raw, billed
+    return (_tail_parse(raw, choice.finish_reason == "length"), None, raw, billed,
+            choice.finish_reason)
 
 
 def _usage(response):

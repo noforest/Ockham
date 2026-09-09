@@ -177,18 +177,24 @@ def run_cell(cfg):
     run_id = f"{cfg.cell_id()}_r{cfg.replicate}_{time.strftime('%Y%m%d_%H%M%S')}"
     out_path = out_dir / f"results_{run_id}.jsonl"
     part_path = out_path.with_name(out_path.name + ".partial")
+    # The verbatim exchange, kept beside the ledger so the results file stays small.
+    log_dir = out_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_path = log_dir / f"log_{run_id}.jsonl"
 
     total = len(samples)
-    with open(part_path, "w", encoding="utf-8") as out:
+    with open(part_path, "w", encoding="utf-8") as out, \
+            open(log_path, "w", encoding="utf-8") as log:
         for done, sample in enumerate(samples, 1):
             pack = build_pack(sample, selector_fn, represent_fn, needs_pool, cfg.budget)
             if cfg.show_pack:
                 print(f"\n----- {sample.sample_id} -----\n{pack['pack_text']}")
             if cfg.no_llm:
-                prediction, p_vulnerable, raw, billed, llm_s = -1, None, "[no-llm]", None, 0.0
+                prediction, p_vulnerable, raw, billed = -1, None, "[no-llm]", None
+                finish_reason, llm_s = "no-llm", 0.0
             else:
                 t_llm = time.time()
-                prediction, p_vulnerable, raw, billed = solver.predict(
+                prediction, p_vulnerable, raw, billed, finish_reason = solver.predict(
                     pack["pack_text"], cfg.model, cfg.base_url, cfg.api_key, seed=cfg.seed,
                     logprobs=cfg.logprobs, max_tokens=cfg.max_tokens,
                     reasoning=cfg.reasoning, prompt=cfg.prompt,
@@ -218,7 +224,8 @@ def run_cell(cfg):
                 "price_in": price_in, "price_out": price_out,
                 "s2_model": embeddings.MODEL_NAME,
                 "prediction": prediction, "p_vulnerable": p_vulnerable,
-                "model_output_raw": raw, "llm_time_s": llm_s,
+                "model_output_raw": raw, "finish_reason": finish_reason,
+                "llm_time_s": llm_s,
                 "billed_prompt_tokens": (billed or {}).get("prompt"),
                 "billed_completion_tokens": (billed or {}).get("completion"),
                 "billed_reasoning_tokens": (billed or {}).get("reasoning"),
@@ -229,6 +236,24 @@ def run_cell(cfg):
             }
             out.write(json.dumps(record) + "\n")
             out.flush()
+
+            log.write(json.dumps({
+                "run_id": run_id, "sample_id": sample.sample_id, "label": sample.label,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "model": cfg.model, "base_url": cfg.base_url, "provider": cfg.provider,
+                "temperature": 0, "max_tokens": cfg.max_tokens, "seed": cfg.seed,
+                "reasoning": cfg.reasoning, "logprobs": cfg.logprobs,
+                "prompt_id": cfg.prompt,
+                "selector": cfg.selector, "representation": cfg.representation,
+                "budget": cfg.budget, "backend": cfg.backend, "replicate": cfg.replicate,
+                "system_prompt": solver.SYSTEM_PROMPTS[cfg.prompt],
+                "user_message": pack["pack_text"],
+                "evidence_names": pack["evidence_names"],
+                "response": raw, "finish_reason": finish_reason,
+                "prediction": prediction, "llm_time_s": llm_s,
+                "billed": billed,
+            }) + "\n")
+            log.flush()
 
     part_path.replace(out_path)     # the final name means the cell finished
 
