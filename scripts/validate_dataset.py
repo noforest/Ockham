@@ -16,8 +16,8 @@ REQUIRED = ["idx", "cve", "cwe", "project", "project_url", "file_name",
 
 
 def check_lines(path):
-    """Report every line that is not readable JSON or is missing a required field."""
-    problems, seen, n = [], set(), 0
+    """Problems that break the contract, and repeated idx, which the loader handles."""
+    problems, repeats, seen, n = [], [], set(), 0
     with open(path, encoding="utf-8") as f:
         for i, line in enumerate(f, 1):
             if not line.strip():
@@ -35,9 +35,9 @@ def check_lines(path):
             if not isinstance(row["cwe"], list):
                 problems.append(f"line {i}: cwe is {type(row['cwe']).__name__}, expected a list")
             if row["idx"] in seen:
-                problems.append(f"line {i}: idx {row['idx']} already seen, the loader keeps the first")
+                repeats.append(row["idx"])
             seen.add(row["idx"])
-    return n, len(seen), problems
+    return n, len(seen), problems, repeats
 
 
 def main():
@@ -49,8 +49,10 @@ def main():
     if not Path(args.path).exists():
         sys.exit(f"no file at {args.path}")
 
-    n_lines, n_idx, problems = check_lines(args.path)
+    n_lines, n_idx, problems, repeats = check_lines(args.path)
     print(f"{args.path}: {n_lines} lines, {n_idx} distinct idx")
+    if repeats:
+        print(f"  note: {len(repeats)} repeated idx, the loader keeps the first of each")
     for p in problems[:args.show]:
         print(f"  {p}")
     if len(problems) > args.show:
