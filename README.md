@@ -37,7 +37,8 @@ python scripts/run_experiment.py --phase 1 --subsample 60 --out-dir results/exp1
     --model <model> --base-url <url> --api-key "$KEY"
 
 # the three phases, unattended
-python scripts/run_all.py --subsample 60 --model <model> --base-url <url>
+python scripts/run_all.py --subsample 60 --model <model> --base-url <url> \
+    --out-dir results/full_run
 
 # read the results
 python scripts/show_metrics.py results/exp1
@@ -45,20 +46,20 @@ python scripts/show_metrics.py results/exp1
 
 ### What `run_all.py` does
 
-1. **Freeze.** Draws the sample set once into `<out-dir>/sample_set.json`; all three
+1. **Freeze:** Draws the sample set once into `<out-dir>/sample_set.json`; all three
    phases use those same functions.
-2. **Phase 1** -- every selector at `R0`, fixed budget, into `<out-dir>/exp1/`.
-3. **Gates.** `validity_checks.py` on that directory. A failed gate stops the run:
+2. **Phase 1:** every selector at `R0`, fixed budget, into `<out-dir>/exp1/`.
+3. **Gates:** `validity_checks.py` on that directory. A failed gate stops the run:
    the next phase would be built on it. `--ignore-gates` runs anyway (`--no-llm`
    implies it, a rehearsal predicts nothing).
-4. **Promotion.** `promote.py` ranks the cells by pAcc. A cell that does not beat the
+4. **Promotion:** `promote.py` ranks the cells by pAcc. A cell that does not beat the
    random control `C2` is never promoted. Cells within the tie threshold of the leader
    are ordered by cost, cheapest first, so a much lighter cell is not dropped over a
    difference inside the noise. The top `--top1` selectors go to phase 2.
-5. **Phase 2** -- those selectors x every representation, into `exp2/`; gates and
+5. **Phase 2:** those selectors x every representation, into `exp2/`; gates and
    promotion again, keeping the top `--top2` (selector, representation) pairs.
-6. **Phase 3** -- those pairs x budgets 2000 / 4000 / 8000, into `exp3/`.
-7. **Summary** -- cells and gate state per phase; everything is also in
+6. **Phase 3:** those pairs x budgets 2000 / 4000 / 8000, into `exp3/`.
+7. **Summary:** cells and gate state per phase; everything is also in
    `<out-dir>/run_all_*.log`.
 
 Rerunning the same command resumes: finished cells are skipped.
