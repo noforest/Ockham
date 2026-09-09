@@ -15,6 +15,7 @@ BACKENDS = ("ts", "joern")
 _backend_name = "ts"
 _BACKEND = None
 _current = None       # (backend, worktree) the backend's symbol table describes now
+_from_cache = False   # did the last index build read the backend's disk cache?
 _index_times = {}     # -> seconds spent on the first index build
 _index_counts = {}    # -> symbols found; 0 means the backend failed
 
@@ -60,14 +61,15 @@ def guess_function_name(body):
 
 def ensure_indexed(repo_dir):
     """Index a checkout, again when the backend has moved to another one since."""
-    global _current
+    global _current, _from_cache
     key = (_backend_name, str(repo_dir))
     if _current != key:
         t0 = time.time()
         _index_counts[key] = backend().index(repo_dir)
         _index_times.setdefault(key, time.time() - t0)      # the cold cost of this checkout
+        _from_cache = backend().index_from_cache()
         _current = key
-    return _index_times.get(key, 0.0), _index_counts.get(key, 0)
+    return _index_times.get(key, 0.0), _index_counts.get(key, 0), _from_cache
 
 
 def build_candidate_pool(sample, repo_dir):

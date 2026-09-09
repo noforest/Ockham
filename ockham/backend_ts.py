@@ -27,6 +27,7 @@ _KEEP = {"declaration", "if_statement", "while_statement", "for_statement",
          "case_statement", "labeled_statement", "call_expression"}
 
 _symbols = {}   # name -> (Path, line)
+_from_cache = False   # did the last index() read the disk cache instead of running ctags?
 _trees = {}     # Path -> (source bytes, root node)
 _walked = {}    # name -> (calls, identifiers, keep_lines)
 
@@ -49,15 +50,44 @@ def _run_ctags(repo_dir):
     return entries
 
 
+def _cache_path(repo_dir):
+    """<workspace>/ctags_cache/<worktree>.json; the tags only depend on the checkout."""
+    repo_dir = Path(repo_dir).resolve()
+    return repo_dir.parent.parent / "ctags_cache" / f"{repo_dir.name}.json"
+
+
 def index(repo_dir):
-    """Build name -> (file, line) for a checkout. Returns the symbol count."""
-    global _symbols, _trees
+    """Build name -> (file, line) for a checkout, from disk when already tagged."""
+    global _symbols, _trees, _from_cache
     _symbols = {}
     _trees = {}
     _walked.clear()   # keyed by name only, so answers would otherwise cross checkouts
-    for name, path, line in _run_ctags(repo_dir):
+    cache = _cache_path(repo_dir)
+    _from_cache = False
+    entries = None
+    if cache.exists():
+        try:
+            entries = json.loads(cache.read_text(encoding="utf-8"))
+            _from_cache = True
+        except (OSError, ValueError):
+            entries = None                          # a corrupt cache is rebuilt
+    if entries is None:
+        entries = _run_ctags(repo_dir)
+        try:
+            cache.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cache.with_suffix(".json.partial")
+            tmp.write_text(json.dumps(entries), encoding="utf-8")
+            tmp.replace(cache)
+        except OSError:
+            pass                                    # an unwritable cache must not fail the run
+    for name, path, line in entries:
         _symbols.setdefault(name, (Path(path), line))   # first definition wins
     return len(_symbols)
+
+
+def index_from_cache():
+    """Did the last index() read the disk cache instead of running ctags?"""
+    return _from_cache
 
 
 def symbols():

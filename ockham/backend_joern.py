@@ -1,5 +1,6 @@
 """CPG backend: one joern-parse plus one dump.sc per checkout, same convention as backend_ts."""
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -20,6 +21,14 @@ _identifiers = {}   # name -> frozenset[str]
 _keep = {}          # name -> frozenset[int], rows relative to the method's first line
 _repo_dir = None    # the checkout the tables describe, for resolving filenames
 _file_lines = {}    # resolved path -> the file's lines, read once
+_from_cache = False # did the last index() read the disk cache instead of running joern?
+
+
+def _cache_path(repo_dir):
+    """<workspace>/joern_cache/<worktree>-<hash>.json; the dump only depends on the checkout."""
+    repo_dir = Path(repo_dir).resolve()
+    digest = hashlib.sha256(str(repo_dir).encode("utf-8")).hexdigest()[:12]
+    return repo_dir.parent.parent / "joern_cache" / f"{repo_dir.name}-{digest}.json"
 
 
 def _load(methods, repo_dir=None):
@@ -77,14 +86,38 @@ def _build_dump(repo_dir):
 
 
 def index(repo_dir):
-    """Build the tables for this checkout; 0 methods means the backend failed on it."""
+    """Build the tables for this checkout, from disk when already dumped; 0 means it failed."""
+    global _from_cache
+    _from_cache = False
+    cache = _cache_path(repo_dir)
+    if cache.exists():
+        try:
+            n = _load(json.loads(cache.read_text(encoding="utf-8")), repo_dir)
+            _from_cache = True
+            print(f"[joern] {n} methods from cache ({cache.name})", flush=True)
+            return n
+        except (OSError, ValueError):
+            pass                                   # a corrupt cache is rebuilt
+
     t0 = time.time()
     methods = _build_dump(repo_dir)
     if methods is None:
         return _load([], repo_dir)
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cache.with_suffix(".json.partial")
+        tmp.write_text(json.dumps(methods), encoding="utf-8")
+        tmp.replace(cache)
+    except OSError:
+        pass                                       # an unwritable cache must not fail the run
     n = _load(methods, repo_dir)
     print(f"[joern] indexed {n} methods ({time.time() - t0:.0f}s)", flush=True)
     return n
+
+
+def index_from_cache():
+    """Did the last index() read the disk cache? Recorded per row, cold cost is the s3 number."""
+    return _from_cache
 
 
 def symbols():

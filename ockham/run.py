@@ -66,11 +66,12 @@ def build_pack(sample, selector_fn, represent_fn, needs_pool, budget):
         pack_text = represent_fn(target, [], target_file=sample.file_name)       # degrade to target-only
         return _ledger(pack_text, [], 0, 0.0, (time.time() - t_cold) * 1000, 0.0, 1)
 
-    index_s, n_symbols = C.ensure_indexed(wt)
+    index_s, n_symbols, from_cache = C.ensure_indexed(wt)
     if n_symbols == 0:
         # An empty pool would read exactly like a selector finding nothing relevant.
         pack_text = represent_fn(target, [], target_file=sample.file_name)
-        return _ledger(pack_text, [], 0, index_s, (time.time() - t_cold) * 1000, 0.0, 1)
+        return _ledger(pack_text, [], 0, index_s, (time.time() - t_cold) * 1000, 0.0, 1,
+                       from_cache)
 
     pool = C.build_candidate_pool(sample, wt)
     t_warm = time.time()
@@ -78,10 +79,11 @@ def build_pack(sample, selector_fn, represent_fn, needs_pool, budget):
     pack_text = represent_fn(target, selected, target_file=sample.file_name)
     warm_ms = (time.time() - t_warm) * 1000
     return _ledger(pack_text, selected, len(pool), index_s,
-                   (time.time() - t_cold) * 1000, warm_ms, 0)
+                   (time.time() - t_cold) * 1000, warm_ms, 0, from_cache)
 
 
-def _ledger(pack_text, selected, pool_n, index_s, cold_ms, warm_ms, backend_fail):
+def _ledger(pack_text, selected, pool_n, index_s, cold_ms, warm_ms, backend_fail,
+            from_cache=False):
     return {
         "pack_text": pack_text,
         "pack_tokens": C.count_tokens(pack_text),
@@ -91,6 +93,7 @@ def _ledger(pack_text, selected, pool_n, index_s, cold_ms, warm_ms, backend_fail
         # the twin-vs-twin overlap is computed from this offline
         "evidence_names": [c.name for c in selected],
         "index_time_s": index_s,
+        "index_from_cache": from_cache,
         "build_time_cold_ms": cold_ms,
         "build_time_warm_ms": warm_ms,
         "n_backend_failures": backend_fail,
