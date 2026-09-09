@@ -141,12 +141,25 @@ def compute_metrics(df):
         "mean_evidence_tokens": float(df.n_evidence_tokens.mean()) if len(df) else nan,
         "mean_candidates_pool": float(df.n_candidates_pool.mean()) if len(df) else nan,
         "mean_candidates_selected": float(df.n_candidates_selected.mean()) if len(df) else nan,
-        "median_index_time_s": float(df.index_time_s.median()) if len(df) else nan,
+        # a single median would measure cell order, not the backend: the first cell to
+        # reach a checkout pays for it and every later one reads the cache
+        "median_index_time_s_cold": _index_median(df, False),
+        "median_index_time_s_warm": _index_median(df, True),
+        "index_cache_hit_rate": (float(df.index_from_cache.mean())
+                                 if "index_from_cache" in df and len(df) else nan),
         "median_build_cold_ms": float(df.build_time_cold_ms.median()) if len(df) else nan,
         "median_build_warm_ms": float(df.build_time_warm_ms.median()) if len(df) else nan,
         "n_backend_failures_rate": float((df.n_backend_failures > 0).mean()) if len(df) else nan,
     })
     return out
+
+
+def _index_median(df, cached):
+    """Median index time over the rows that did (or did not) read the backend's disk cache."""
+    if "index_from_cache" not in df or not len(df):
+        return float("nan")
+    rows = df[df.index_from_cache.fillna(False) == cached]
+    return float(rows.index_time_s.median()) if len(rows) else float("nan")
 
 
 def spread(df, metric="pAcc"):

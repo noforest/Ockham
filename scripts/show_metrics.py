@@ -36,7 +36,8 @@ USD = [("in_tok", "usd_in_tokens"), ("out_tok", "usd_out_tokens"), ("usd", "usd_
 
 COST = [("pack", "mean_pack_tokens"), ("evid", "mean_evidence_tokens"),
         ("pool", "mean_candidates_pool"), ("sel", "mean_candidates_selected"),
-        ("index_s", "median_index_time_s"), ("cold_ms", "median_build_cold_ms"),
+        ("index_cold_s", "median_index_time_s_cold"),
+        ("index_warm_s", "median_index_time_s_warm"), ("cold_ms", "median_build_cold_ms"),
         ("warm_ms", "median_build_warm_ms")]
 
 TIME = [("started", "run_started"), ("build_s", "build_s"), ("of it index", "index_s"),
