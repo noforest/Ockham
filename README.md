@@ -41,18 +41,12 @@ python scripts/run_experiment.py --phase 1 --subsample 60 --out-dir results/exp1
 python scripts/run_all.py --subsample 60 --model <model> --base-url <url> \
     --out-dir results/full_run
 
-# read the results. show_metrics walks subdirectories, so it takes the whole run;
-# compare_cells reads one phase, since it pools the replicates of a cell
+# read the results. 
 python scripts/show_metrics.py <out-dir>
 python scripts/compare_cells.py <phase-dir>
 
 # read one exchange in full: parameters, system prompt, pack sent, reply.
-# The log file holds the pack, so this only prints it
 python scripts/show_log.py <phase-dir>/logs/log_S4_R0_b2000_ts_r0_*.jsonl 1442-vuln
-
-# a run older than the logs: the results file holds the reply but never the pack, so the
-# script rebuilds it, which means a checkout, an index and the selector again, minutes
-python scripts/show_log.py <phase-dir>/results_S4_R0_b2000_ts_r0_*.jsonl 1442-vuln
 ```
 
 `<phase-dir>` is what a phase wrote: `--out-dir` itself for `run_experiment.py`, and

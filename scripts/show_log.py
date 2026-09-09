@@ -47,7 +47,7 @@ def render(row, system_prompt=None):
         "n_evidence_tokens", "n_candidates_pool", "n_candidates_selected")
         if row.get(k) is not None}
     params.setdefault("temperature", 0)
-    out = [RULE, f"INTERACTION  {row['sample_id']}  ({row.get('run_id', '?')})", RULE,
+    out = [RULE, f"LOG  {row['sample_id']}  ({row.get('run_id', '?')})", RULE,
            "\n-- PARAMETERS " + "-" * 64,
            json.dumps(params, indent=2, default=str),
            f"\nevidence kept ({len(names)}): {', '.join(names) or '(none)'}",
@@ -76,7 +76,7 @@ def main():
     text = "\n".join(render(r, sys_prompt) for r in rows)
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
-        print(f"[log] {len(rows)} interaction(s) -> {args.out}")
+        print(f"[log] {len(rows)} entries -> {args.out}")
     else:
         print(text)
 
