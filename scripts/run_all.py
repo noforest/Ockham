@@ -68,6 +68,8 @@ def main():
     ap.add_argument("--top1", type=int, default=3, help="selectors promoted out of phase 1")
     ap.add_argument("--top2", type=int, default=4, help="pairs promoted out of phase 2")
     ap.add_argument("--no-llm", action="store_true")
+    ap.add_argument("--ignore-gates", action="store_true",
+                    help="run the later phases even when a gate failed")
     args = ap.parse_args()
 
     out = Path(args.out_dir)
@@ -78,6 +80,10 @@ def main():
     if not args.no_llm and not args.api_key:
         # Fail here, not in six hours: without a key every cell would be logged unavailable.
         sys.exit("no API key: pass --api-key or set OCKHAM_API_KEY, or run with --no-llm")
+
+    if args.no_llm:
+        # With no prediction at all the gates cannot say anything.
+        args.ignore_gates = True
 
     log(f"[run_all] output {out}, budget {args.budget}, seed {args.seed}, "
         f"backend {args.backend}, {'no LLM' if args.no_llm else args.model}")
@@ -114,6 +120,12 @@ def main():
         gates[phase] = sh(PY + ["scripts/validity_checks.py", phase_dir]) == 0
         sh(PY + ["scripts/promote.py", phase_dir, "--top", top,
                  "--json", phase_dir / "promoted.json"])
+
+        if phase < 3 and not gates[phase] and not args.ignore_gates:
+            log(f"\n[run_all] STOP: a gate failed on phase {phase}, which phase {phase + 1} "
+                f"would be built on. Fix the cause and rerun (finished cells are skipped), "
+                f"or pass --ignore-gates.")
+            break
 
     log(f"\n{'=' * 78}\n[run_all] summary after {(time.time() - started) / 3600:.1f} h")
     for phase in (1, 2, 3):
