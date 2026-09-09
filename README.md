@@ -33,8 +33,9 @@ python scripts/validate_dataset.py data/pairs.jsonl
 python -m ockham.run --selector S4 --representation R1 --limit 6 --no-llm
 
 # one phase
+export OCKHAM_API_KEY=<key>          # never on the command line: argv is world-readable
 python scripts/run_experiment.py --phase 1 --subsample 60 --out-dir results/exp1 \
-    --model <model> --base-url <url> --api-key "$KEY"
+    --model <model> --base-url <url>
 
 # the three phases, unattended
 python scripts/run_all.py --subsample 60 --model <model> --base-url <url> \

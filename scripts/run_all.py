@@ -25,11 +25,17 @@ def log(line=""):
             f.write(line + "\n")
 
 
-def sh(cmd):
+def _redact(arg):
+    """Never echo a credential, whoever passed it."""
+    text = str(arg)
+    return "***" if text.startswith("sk-") or len(text) > 40 and "-" in text[:8] else text
+
+
+def sh(cmd, env=None):
     """Run a step, streaming its output to the console and the log; returns its exit code."""
-    log(f"\n{'=' * 78}\n$ {' '.join(str(c) for c in cmd)}\n{'=' * 78}")
+    log(f"\n{'=' * 78}\n$ {' '.join(_redact(c) for c in cmd)}\n{'=' * 78}")
     proc = subprocess.Popen([str(c) for c in cmd], cwd=ROOT, text=True, bufsize=1,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                            env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     for line in proc.stdout:
         log(line.rstrip("\n"))
     return proc.wait()
@@ -94,11 +100,15 @@ def main():
     log(f"[run_all] output {out}, budget {args.budget}, seed {args.seed}, "
         f"backend {args.backend}, {'no LLM' if args.no_llm else args.model}")
 
+    # The key goes down the environment, never on a command line: argv is world-readable
+    # through ps, and this script echoes every command it runs.
+    child_env = dict(os.environ)
+    if args.api_key:
+        child_env["OCKHAM_API_KEY"] = args.api_key
+
     common = ["--budget", args.budget, "--seed", args.seed, "--backend", args.backend,
               "--model", args.model, "--base-url", args.base_url, "--prompt", args.prompt,
               "--repeat", args.repeat, "--subsample", args.subsample]
-    if args.api_key:
-        common += ["--api-key", args.api_key]
     if args.provider:
         common += ["--provider", args.provider]
     if args.reasoning:
@@ -130,7 +140,7 @@ def main():
 
         phase_dir = out / f"exp{phase}"
         sh(PY + ["scripts/run_experiment.py", "--phase", phase, "--sample-set", sample_set,
-                 "--out-dir", phase_dir] + common + extra)
+                 "--out-dir", phase_dir] + common + extra, env=child_env)
         log(f"\n[run_all] phase {phase}: {n_cells(phase_dir)} cell(s) with results")
 
         gates[phase] = sh(PY + ["scripts/validity_checks.py", phase_dir]) == 0
