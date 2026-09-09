@@ -11,6 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PY = [sys.executable, "-u"]     # unbuffered, so a container streams its log
 
+# Used only when a phase promotes nothing, which is what a --no-llm rehearsal does.
+FALLBACK_SELECTORS = ["S5", "S4", "S1"]
+FALLBACK_PAIRS = [("S5", "R0"), ("S4", "R1"), ("S1", "R0"), ("S4", "R2")]
+
 _log_path = None
 
 
@@ -31,12 +35,16 @@ def sh(cmd):
     return proc.wait()
 
 
-def promoted_from(path):
-    """The (selector, representation) pairs a phase promoted."""
-    if not path.exists():
-        return []
-    rows = json.loads(path.read_text(encoding="utf-8")).get("promoted", [])
-    return [(r["selector"], r["representation"]) for r in rows]
+def promoted_from(path, fallback, phase):
+    """The pairs a phase promoted, or a stated fallback, announced loudly."""
+    if path.exists():
+        rows = json.loads(path.read_text(encoding="utf-8")).get("promoted", [])
+        if rows:
+            return [(r["selector"], r["representation"]) for r in rows]
+    log(f"\n[run_all] WARNING: phase {phase} promoted nothing, falling back to {fallback}.")
+    log("[run_all] Expected with --no-llm. In a real run it means no cell beat the C2 "
+        "floor, and the next phase is NOT a valid experimental result.")
+    return list(fallback)
 
 
 def n_cells(out_dir):
@@ -90,10 +98,11 @@ def main():
     for phase, top in ((1, args.top1), (2, args.top2), (3, args.top2)):
         extra = []
         if phase == 2:
-            pairs = promoted_from(out / "exp1" / "promoted.json")
+            pairs = promoted_from(out / "exp1" / "promoted.json",
+                                  [(s, "R0") for s in FALLBACK_SELECTORS], 1)
             extra = ["--selectors"] + list(dict.fromkeys(s for s, _ in pairs))
         elif phase == 3:
-            pairs = promoted_from(out / "exp2" / "promoted.json")
+            pairs = promoted_from(out / "exp2" / "promoted.json", FALLBACK_PAIRS, 2)
             extra = (["--selectors"] + [s for s, _ in pairs]
                      + ["--representations"] + [r for _, r in pairs])
 
