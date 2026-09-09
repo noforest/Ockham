@@ -1,65 +1,56 @@
 # Ockham
 
-> *Pluralitas non est ponenda sine necessitate.*
->
-> William of Ockham
+> *Pluralitas non est ponenda sine necessitate.* — William of Ockham
 
-Building the smallest repository context an LLM needs to decide whether a C/C++
-function is vulnerable.
+The smallest repository context an LLM needs to judge a C/C++ function.
 
-## Dataset
+## Install
 
 ```bash
-mkdir data
-cd data
-curl -Lo pairs.jsonl https://raw.githubusercontent.com/alperen21/JitVul/main/data/final_benchmark.jsonl
+pip install -r requirements.txt     # needs ctags and git on the PATH
 ```
 
-## Usage
+## Data
 
-```python
-# draw a sample set
-python -m ockham.run --subsample 60 --seed 0 \
-    --freeze-samples results/exp1/sample_set_60_pairs.json --freeze-only
+`data/pairs.jsonl`, one JSON object per line. A line is a pair: the same function
+before and after its fix.
 
-# one cell without the model call: pack size and build time only
+| field | |
+|---|---|
+| `idx` | pair id |
+| `cve`, `cwe`, `project`, `project_url`, `file_name` | provenance |
+| `vulnerable_function_body`, `non_vulnerable_function_body` | the two halves |
+| `vulnerable_commit_id`, `vulnerability_fixing_commit_id` | commits to check out |
+
+```bash
+python scripts/validate_dataset.py data/pairs.jsonl
+```
+
+## Run
+
+```bash
+# one cell, no model call
 python -m ockham.run --selector S4 --representation R1 --limit 6 --no-llm
 
-# a full phase: every selector on that frozen set, written to one directory
-python scripts/run_experiment.py --phase 1 --repeat 3 --budget 2000 --seed 0 \
-    --sample-set results/exp1/sample_set_60_pairs.json \
-    --model <model> \
-    --base-url <url> \
-    --api-key "$API_KEY" \
-    --out-dir results/exp1
+# one phase
+python scripts/run_experiment.py --phase 1 --subsample 60 --out-dir results/exp1 \
+    --model <model> --base-url <url> --api-key "$KEY"
 
-# read the results data into nice tables
+# the three phases, unattended
+python scripts/run_all.py --subsample 60 --model <model> --base-url <url>
+
+# read the results
 python scripts/show_metrics.py results/exp1
 ```
+
+Selectors: `C0` target only, `C1` same file, `C2` random, `S1` BM25, `S2` dense,
+`S3` fused, `S4` call graph, `S5` dependence slice.
+Representations: `R0` raw, `R1` kept lines, `R2` call sites.
 
 ## Docker
 
 ```bash
 printf 'HOST_UID=%s\nHOST_GID=%s\n' $(id -u) $(id -g) > .env
 docker compose build
+docker compose run --rm ockham python scripts/run_all.py --subsample 60 --no-llm
 ```
-
-Every command above runs unchanged inside the container:
-
-```bash
-docker compose run --rm ockham python -m ockham.run --subsample 60 --seed 0 \
-    --freeze-samples results/exp1/sample_set_60_pairs.json --freeze-only
-
-docker compose run --rm ockham python -m ockham.run --selector S4 --representation R1 --limit 6 --no-llm
-
-docker compose run --rm ockham python scripts/run_experiment.py --phase 1 --repeat 3 --budget 2000 --seed 0 \
-    --sample-set results/exp1/sample_set_60_pairs.json \
-    --model <model> \
-    --base-url <url> \
-    --api-key "$API_KEY" \
-    --out-dir results/exp1
-
-docker compose run --rm ockham python scripts/show_metrics.py results/exp1
-```
-
-
