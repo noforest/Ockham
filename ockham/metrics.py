@@ -141,8 +141,7 @@ def compute_metrics(df):
         "mean_evidence_tokens": float(df.n_evidence_tokens.mean()) if len(df) else nan,
         "mean_candidates_pool": float(df.n_candidates_pool.mean()) if len(df) else nan,
         "mean_candidates_selected": float(df.n_candidates_selected.mean()) if len(df) else nan,
-        # a single median would measure cell order, not the backend: the first cell to
-        # reach a checkout pays for it and every later one reads the cache
+        # one median would measure cell order: only the first cell to reach a checkout pays
         "median_index_time_s_cold": _index_median(df, False),
         "median_index_time_s_warm": _index_median(df, True),
         "index_cache_hit_rate": (float(df.index_from_cache.mean())

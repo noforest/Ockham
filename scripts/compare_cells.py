@@ -1,11 +1,4 @@
-"""Compare cells: pAcc, the pair breakdown, cost. Replicates are pooled.
-
-    python scripts/compare_cells.py results/grid                  # the table alone
-    python scripts/compare_cells.py results/grid C0/R0/v1         # + McNemar against C0
-
-McNemar is printed only when a reference cell is named, since it is a claim about two cells
-and not a property of the table.
-"""
+"""Compare cells -- pAcc, pair breakdown, cost -- with McNemar when a reference is named."""
 
 import json
 import sys

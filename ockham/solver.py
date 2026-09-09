@@ -5,19 +5,7 @@ import time
 
 from openai import APIError, OpenAI
 
-# The only prompt: one-shot, argued verdict, "VERDICT: <word>" as the last line. Where each
-# clause comes from (papers/ in DEPOT_Contextpack-vuln):
-#   "You are a security reviewer" and the fixed last line with nothing after it -- Chen et al.,
-#     LLM4FPM, arXiv:2411.03079, Fig. 7: "As an expert in C/C++ code review [...] I should
-#     conclude with '@@@ real bug @@@' [...] and include no other output." Form only.
-#   "Reason step by step" -- Wei et al., NeurIPS 2022, via LLM4FPM s.IV.B.2.
-#   "not necessarily related to it" -- irrelevant context distracts: Parasaram et al.,
-#     arXiv:2404.05520; Jia et al., Compressing Code Context for LLM-based Issue Resolution;
-#     Shi et al., LongCodeZip.
-#   No source: "any kind of defect counts" (CWE-agnostic, where LLM4FPM and PacVD both tailor
-#     the prompt per CWE), weighing both verdicts instead of defaulting to one, and the 2560
-#     cap around 2000 announced (_tail_parse needs the verdict line; 2048 lost it 31 % of
-#     the time).
+# One-shot, argued verdict, "VERDICT: <word>" as the last line, CWE-agnostic.
 _V5 = (                                         # 154 tokens (cl100k_base)
     "You are a security reviewer. You are shown one TARGET FUNCTION to judge, and "
     "optionally a CONTEXT section of other functions from the same repository, retrieved "
@@ -39,8 +27,7 @@ SYSTEM_PROMPTS = {"v5": _V5}
 SYSTEM_PROMPT = _V5          # kept as a name for prompt_tokens_total
 
 
-# The whole completion, reasoning included: 2000 announced for the analysis, the rest is the
-# verdict line's margin (at 2048 the model overran on 31 % of replies and lost it).
+# Reasoning included: 2000 for the analysis, the rest is the verdict line's margin.
 DEFAULT_MAX_TOKENS = 2560
 REQUEST_TIMEOUT_S = 120
 RETRIES = 3               # a 429 is a queue, not a verdict
@@ -69,12 +56,7 @@ def _side(token):
 
 
 def extract_verdict(first_token_logprobs):
-    """(prediction, p_vulnerable) from token 0: softmax over the two verdict logprobs.
-
-    Neither verdict among the candidates means unreadable, never SAFE. When only one
-    side is there, the missing logprob is floored at the lowest candidate, a lower
-    bound that still yields a usable probability for a confident one-sided reply.
-    """
+    """(prediction, p_vulnerable) from token 0; no verdict there is unreadable, never SAFE."""
     lp_v = lp_s = None
     all_lps = []
     for e in first_token_logprobs:
@@ -99,8 +81,7 @@ def _hard_parse(text):
 
 
 def _tail_parse(text, truncated=False):
-    """v2/v3/v4: the last VERDICT: line; failing that the last verdict word, unless the
-    reply was cut off at max_tokens -- there the word is mid-analysis, not a conclusion."""
+    """The last VERDICT: line, or the last verdict word unless the reply was cut off."""
     for line in reversed(text.strip().splitlines()):
         line = line.strip().strip("*#` ")     # a model that bolds the line still parses
         if line.upper().startswith("VERDICT"):
@@ -119,19 +100,14 @@ def _verdict_of(text):
 
 def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOKENS,
             seed=None, logprobs=True, reasoning=None, prompt="v1", provider=None):
-    """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply, usage), one call.
-
-    usage is what the API billed, not what tiktoken counted locally: a reasoning model
-    charges tokens that never appear in the reply, so the local estimate understates it.
-    """
+    """(prediction in {1, 0, -1}, p_vulnerable or None, raw reply, billed usage), one call."""
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
     extra = {}
     # Token 0 is analysis, not the verdict, so its logprobs would describe nothing.
     logprobs = False
     if logprobs:
-        # a router may fall back to a host that drops logprobs and still answer 200;
-        # ignored by endpoints that do not route
+        # a router may fall back to a host that drops logprobs and still answer 200
         kwargs.update(logprobs=True, top_logprobs=_TOP_LOGPROBS)
         extra["provider"] = {"require_parameters": True}
     if reasoning is not None:

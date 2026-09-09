@@ -1,8 +1,4 @@
-"""Print the metrics of one cell, or of every cell in a directory.
-
-The metrics files store only medians, so every duration here is summed from the sibling
-results_*.jsonl instead; a cell whose rows are missing shows "-".
-"""
+"""Print the metrics of one cell or of a directory; durations are summed from the rows."""
 
 import json
 import sys
@@ -27,8 +23,7 @@ DETECTION = [("pairs", "n_pairs"), ("drop", "n_pairs_dropped_unparsable"),
              ("recall", "recall"), ("balanced_acc", "balanced_accuracy"),]
              # ("AUPRC", "AUPRC"), ("AUROC", "AUROC"), ("Brier", "Brier")]
 
-# Fallback only. The real rate and the real token counts are read from
-# results_*.jsonl.
+# Fallback only: the real rate and token counts come from the rows.
 
 MODEL, PRICE_IN, PRICE_OUT, MAX_TOKENS = "gemma-4-26b-a4b, cheapest host", 0.042, 0.220, 8
 
