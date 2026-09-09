@@ -50,9 +50,11 @@ python scripts/show_metrics.py results/exp1
 1. **Freeze:** Draws the sample set once into `<out-dir>/sample_set.json`; all three
    phases use those same functions.
 2. **Phase 1:** every selector at `R0`, fixed budget, into `<out-dir>/exp1/`.
-3. **Gates:** `validity_checks.py` on that directory. A failed gate stops the run:
-   the next phase would be built on it. `--ignore-gates` runs anyway (`--no-llm`
-   implies it, a rehearsal predicts nothing).
+3. **Gates:** `validity_checks.py` on that directory. Only what makes the numbers
+   unreadable can stop the run -- unreadable replies, a suspiciously strong `C0`. A
+   score below the always-vulnerable baseline is a result, not a fault, so it warns.
+   Nothing fails under 10 pairs, where a single reply would decide. `--ignore-gates`
+   runs anyway (`--no-llm` implies it, a rehearsal predicts nothing).
 4. **Promotion:** `promote.py` ranks the cells by pAcc. A cell that does not beat the
    random control `C2` is never promoted. Cells within the tie threshold of the leader
    are ordered by cost, cheapest first, so a much lighter cell is not dropped over a

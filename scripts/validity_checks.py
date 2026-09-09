@@ -11,6 +11,7 @@ from ockham.metrics import load_cells
 
 MAX_C0_PACC = 0.85        # above this, C0 alone is recalling the fix, not analysing
 MAX_UNPARSABLE = 0.05
+MIN_PAIRS = 10            # below this a gate would be failing on noise
 CONTROLS = {"C0", "C1", "C2"}
 
 
@@ -58,8 +59,9 @@ def trivial_baseline(cells, _pacc):
              for cid, (m, _df, _p) in sorted(cells.items())
              if _val(m.get("F1")) is not None and _val(m.get("F1_trivial")) is not None
              and m["F1"] < m["F1_trivial"]]
+    # A result, not an invalidity: reported, never blocking.
     if worse:
-        return "FAIL", f"{len(worse)} cell(s) below trivial: {'; '.join(worse[:4])}"
+        return "WARN", f"{len(worse)} cell(s) below trivial: {'; '.join(worse[:4])}"
     return "PASS", "every cell at or above the always-vulnerable F1"
 
 
@@ -86,14 +88,19 @@ def main():
     if not cells:
         sys.exit(f"no results found in {args.results_dir}")
 
+    n_pairs = max((m.get("n_pairs") or 0 for m, _df, _p in cells.values()), default=0)
     print(f"Validity checks over {len(cells)} cells in {args.results_dir}\n")
     pacc = by_selector(cells)
-    failed = 0
+    failed = warned = 0
     for name, gate in GATES:
         status, detail = gate(cells, pacc)
+        if status == "FAIL" and n_pairs < MIN_PAIRS:
+            status, detail = "WARN", f"{detail} -- only {n_pairs} pair(s), too few to fail on"
         failed += status == "FAIL"
+        warned += status == "WARN"
         print(f"  [{status}] {name}: {detail}", flush=True)
-    print(f"\n{failed} gate(s) failed." if failed else "\nAll gates passed.")
+    print(f"\n{failed} gate(s) failed, {warned} warning(s)." if failed
+          else f"\nNo blocking gate, {warned} warning(s).")
     return 1 if failed else 0
 
 
