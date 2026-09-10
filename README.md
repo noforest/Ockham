@@ -58,21 +58,12 @@ system prompt, the pack sent, the full reply, `finish_reason` and every paramete
 
 ### Prompts
 
-The system prompt lives in `prompts.toml`, not in the code. Each `[prompts.<name>]` entry is
-one prompt, picked with `--prompt <name>`: `direct` and `rationale` put the verdict on the
-first line, the `*_cwe` entries also ask for the CWE, `v5` is the phase 1 prompt. Every row
-records the entry and a hash of its rendered text (`prompt_sha`).
-
-The verdict is read strictly: the `VERDICT:` line must say `VULNERABLE` or `SAFE`, and
-anything else is unparsable (-1), never guessed from the words of the reply. A reply cut at
-`max_tokens` still counts when its verdict line is complete. Each unparsable reply is also
-copied to `<phase-dir>/logs/unparsable_<run_id>.jsonl`, with its reason, for a manual read.
-
-The results read as two tasks: absolute detection, each function on its own, and paired
-discrimination, the vulnerable and the fixed half of one pair. Both are scored on the
-readable replies, whose count and vuln/safe balance are printed next to them. The
-operational table (`*_op`) keeps the whole frozen set as denominator instead, with every
-failure counted as a wrong answer, next to the failure rate.
+The system prompt lives in `prompts.toml`: pick an entry with `--prompt <name>` (`direct`,
+`rationale`, their `*_cwe` variants, or `v5`); each row records its hash (`prompt_sha`).
+The verdict is read strictly from the `VERDICT:` line (`VULNERABLE` or `SAFE`, anything else
+is -1), and unparsable replies are copied to `<phase-dir>/logs/unparsable_<run_id>.jsonl`.
+Results come as two tasks, each function alone then the pairs, on the readable replies,
+plus an operational view (`*_op`) where every failure counts as a wrong answer.
 
 ### What `run_all.py` does
 
