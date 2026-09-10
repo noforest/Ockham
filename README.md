@@ -59,7 +59,7 @@ system prompt, the pack sent, the full reply, `finish_reason` and every paramete
 ### Prompts
 
 The system prompt lives in `prompts.toml`: pick an entry with `--prompt <name>` (`direct`,
-`rationale`, their `*_cwe` variants, or `v5`); each row records its hash (`prompt_sha`).
+`rationale`, their `*_cwe` variants, or `v5`). Each row records its hash (`prompt_sha`).
 The verdict is read strictly from the `VERDICT:` line (`VULNERABLE` or `SAFE`, anything else
 is -1), and unparsable replies are copied to `<phase-dir>/logs/unparsable_<run_id>.jsonl`.
 Results come as two tasks, each function alone then the pairs, on the readable replies,
