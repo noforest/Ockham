@@ -56,6 +56,24 @@ Every phase writes `<phase-dir>/logs/log_<run_id>.jsonl`, one JSON object per mo
 system prompt, the pack sent, the full reply, `finish_reason` and every parameter.
 `<out-dir>/console_output_*.log` is a different thing, the driver's console transcript.
 
+### Prompts
+
+The system prompt lives in `prompts.toml`, not in the code. Each `[prompts.<name>]` entry is
+one prompt, picked with `--prompt <name>`: `direct` and `rationale` put the verdict on the
+first line, the `*_cwe` entries also ask for the CWE, `v5` is the phase 1 prompt. Every row
+records the entry and a hash of its rendered text (`prompt_sha`).
+
+The verdict is read strictly: the `VERDICT:` line must say `VULNERABLE` or `SAFE`, and
+anything else is unparsable (-1), never guessed from the words of the reply. A reply cut at
+`max_tokens` still counts when its verdict line is complete. Each unparsable reply is also
+copied to `<phase-dir>/logs/unparsable_<run_id>.jsonl`, with its reason, for a manual read.
+
+The results read as two tasks: absolute detection, each function on its own, and paired
+discrimination, the vulnerable and the fixed half of one pair. Both are scored on the
+readable replies, whose count and vuln/safe balance are printed next to them. The
+operational table (`*_op`) keeps the whole frozen set as denominator instead, with every
+failure counted as a wrong answer, next to the failure rate.
+
 ### What `run_all.py` does
 
 1. **Freeze:** Draws the sample set once into `<out-dir>/sample_set.json`; all three

@@ -1,8 +1,4 @@
-"""Render an interaction log as text: parameters, system prompt, pack sent, reply.
-
-Reads a `logs/log_*.jsonl` written by a run, or an older `results_*.jsonl` whose pack it
-rebuilds from the row -- the build is deterministic, so the rebuilt text is what was sent.
-"""
+"""Render a logs/log_*.jsonl as text, or rebuild the pack of an older results_*.jsonl."""
 
 import argparse
 import json
@@ -14,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ockham import candidates as C
 from ockham import run as R
-from ockham import solver
+from ockham import prompts
 from ockham.data import load_pairs
 
 RULE = "=" * 78
@@ -41,8 +37,8 @@ def render(row, system_prompt=None):
     params = {k: row.get(k) for k in (
         "run_id", "sample_id", "pair_id", "label", "cve", "cwe", "project", "commit",
         "model", "base_url", "provider", "temperature", "max_tokens", "seed", "reasoning",
-        "prompt_id", "prompt", "selector", "representation", "budget", "backend",
-        "replicate", "sample_set_id", "finish_reason", "prediction", "llm_time_s",
+        "prompt_id", "prompt", "prompt_sha", "selector", "representation", "budget", "backend",
+        "replicate", "sample_set_id", "finish_reason", "prediction", "p_vulnerable", "cwe_pred", "llm_time_s",
         "billed_prompt_tokens", "billed_completion_tokens", "pack_tokens",
         "n_evidence_tokens", "n_candidates_pool", "n_candidates_selected")
         if row.get(k) is not None}
@@ -52,8 +48,8 @@ def render(row, system_prompt=None):
            json.dumps(params, indent=2, default=str),
            f"\nevidence kept ({len(names)}): {', '.join(names) or '(none)'}",
            "\n-- SYSTEM PROMPT " + "-" * 61,
-           system_prompt or solver.SYSTEM_PROMPTS[row.get("prompt_id")
-                                                 or row.get("prompt", "v5")],
+           system_prompt or row.get("system_prompt")
+           or prompts.load(row.get("prompt_id") or row.get("prompt", "v5")).text,
            "\n-- USER MESSAGE (the pack) " + "-" * 51, pack_text,
            "\n-- MODEL REPLY " + "-" * 63, reply, ""]
     return "\n".join(out)
@@ -65,7 +61,7 @@ def main():
     ap.add_argument("sample_ids", nargs="*", help="default: every row in the file")
     ap.add_argument("-o", "--out", default=None, help="write here instead of stdout")
     ap.add_argument("--system-prompt-file", default=None,
-                    help="the prompt as it stood at run time, when solver.py has moved since")
+                    help="the prompt as it stood at run time, when prompts.toml has moved since")
     args = ap.parse_args()
 
     rows = [json.loads(line) for line in open(args.jsonl, encoding="utf-8")]

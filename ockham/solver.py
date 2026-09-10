@@ -1,38 +1,16 @@
-"""The detection call: one pack in, a verdict and its probability out, both from token 0."""
+"""The detection call: one pack in; the verdict, its probability and the CWE out."""
 
 import math
+import re
 import time
 
 from openai import APIError, OpenAI
 
-# One-shot, argued verdict, "VERDICT: <word>" as the last line, CWE-agnostic.
-_V5 = (                                         # 154 tokens (cl100k_base)
-    "You are a security reviewer. You are shown one TARGET FUNCTION to judge, and "
-    "optionally a CONTEXT section of other functions from the same repository, retrieved "
-    "automatically and not necessarily related to it.\n"
-    "\n"
-    "Reason step by step, in as much detail as the code needs: what it does, what an "
-    "input can make it do, and what the context settles about it. Any kind of defect "
-    "counts, and no class of defect is more likely than another.\n"
-    "\n"
-    "Weigh both verdicts on the code you can see, then give the one it supports. Use up "
-    "to 1750 tokens for the analysis, then answer: a reply cut off before its verdict is "
-    "discarded. The last line must be exactly:\n"
-    "VERDICT: VULNERABLE\n"
-    "or\n"
-    "VERDICT: SAFE"
-)
-
-SYSTEM_PROMPTS = {"v5": _V5}
-SYSTEM_PROMPT = _V5          # kept as a name for prompt_tokens_total
-
-
-# Reasoning included: 2000 for the analysis, the rest is the verdict line's margin.
-DEFAULT_MAX_TOKENS = 2560
 REQUEST_TIMEOUT_S = 120
 RETRIES = 3               # a 429 is a queue, not a verdict
 RETRY_BACKOFF_S = 4
 _TOP_LOGPROBS = 5
+_MARKUP = " *`#\n"
 
 _client = None
 _client_base_url = None
@@ -56,7 +34,7 @@ def _side(token):
 
 
 def extract_verdict(first_token_logprobs):
-    """(prediction, p_vulnerable) from token 0; no verdict there is unreadable, never SAFE."""
+    """(prediction, p_vulnerable) from one token's top logprobs; no verdict there is unreadable."""
     lp_v = lp_s = None
     all_lps = []
     for e in first_token_logprobs:
@@ -80,36 +58,56 @@ def _hard_parse(text):
     return 1 if side == "V" else 0 if side == "S" else -1
 
 
-def _tail_parse(text, truncated=False):
-    """The last VERDICT: line, or the last verdict word unless the reply was cut off."""
-    for line in reversed(text.strip().splitlines()):
-        line = line.strip().strip("*#` ")     # a model that bolds the line still parses
-        if line.upper().startswith("VERDICT"):
-            return _verdict_of(line.split(":", 1)[-1])
-    return -1 if truncated else _verdict_of(text)
+_VERDICTS = {"VULNERABLE": 1, "SAFE": 0}
 
 
-def _verdict_of(text):
-    """Last VULNERABLE / SAFE mentioned, so a trailing verdict wins over one in the prose."""
-    up = text.upper()
-    v, sf = up.rfind("VULNERABLE"), up.rfind("SAFE")
-    if v == sf == -1:
-        return -1
-    return 1 if v > sf else 0
+def _verdict_line(text, position="last"):
+    """The first or last VERDICT: line, read strictly: VULNERABLE or SAFE, anything else -1."""
+    # markdown stripped, never words searched: "not vulnerable" must not read as VULNERABLE
+    lines = [re.sub(r"[*`#_]", "", line).strip() for line in text.strip().splitlines()]
+    for line in (lines if position == "first" else reversed(lines)):
+        m = re.match(r"VERDICT\s*:(.*)", line, re.IGNORECASE)
+        if m:
+            return _VERDICTS.get(m.group(1).strip(" .").upper(), -1)
+    return -1
 
 
-def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOKENS,
-            seed=None, logprobs=True, reasoning=None, prompt="v1", provider=None):
-    """(prediction, p_vulnerable, raw reply, billed usage, finish_reason), one call."""
+def parse_cwe(text):
+    """CWE-<n> or UNKNOWN from the CWE: line; None when the reply has no such line."""
+    for line in text.splitlines():
+        line = line.strip().strip("*#` ")
+        if line.upper().startswith("CWE:"):
+            m = re.search(r"\d+", line.split(":", 1)[1])
+            return f"CWE-{m.group(0)}" if m else "UNKNOWN"
+    return None
+
+
+def _verdict_token(content, position="first"):
+    """Top logprobs of the first real token after the first or last VERDICT: marker."""
+    seen, starts = "", []
+    for i, tok in enumerate(content):
+        seen += tok.token
+        if seen.rstrip(_MARKUP).upper().endswith("VERDICT:"):
+            starts.append(i + 1)
+    if not starts:
+        return None
+    for tok in content[starts[0] if position == "first" else starts[-1]:]:
+        if tok.token.strip(_MARKUP):
+            return tok.top_logprobs
+    return None
+
+
+def predict(pack_text, prompt, model, base_url, max_tokens, api_key=None, seed=None,
+            logprobs=True, reasoning=None, provider=None):
+    """One call: {prediction, p_vulnerable, raw, billed, finish_reason, cwe_pred}."""
     client = _get_client(base_url, api_key)
     kwargs = {"seed": seed} if seed is not None else {}
     extra = {}
-    # Token 0 is analysis, not the verdict, so its logprobs would describe nothing.
-    logprobs = False
     if logprobs:
-        # a router may fall back to a host that drops logprobs and still answer 200
         kwargs.update(logprobs=True, top_logprobs=_TOP_LOGPROBS)
-        extra["provider"] = {"require_parameters": True}
+        if not provider:
+            # a router may fall back to a host that drops logprobs and still answer 200
+            extra["provider"] = {"require_parameters": True}
     if reasoning is not None:
         # a thinking model spends max_tokens reasoning and returns empty content
         extra["reasoning"] = ({"enabled": False} if reasoning == "off"
@@ -123,7 +121,7 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOK
         try:
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": SYSTEM_PROMPTS[prompt]},
+                messages=[{"role": "system", "content": prompt.text},
                           {"role": "user", "content": pack_text}],
                 temperature=0, max_tokens=max_tokens, **kwargs,
             )
@@ -132,14 +130,17 @@ def predict(pack_text, model, base_url, api_key=None, max_tokens=DEFAULT_MAX_TOK
             # a 429 lands on contiguous stretches, so it must not become a verdict
             retryable = getattr(e, "status_code", None) in (429, 500, 502, 503, 529)
             if not retryable or attempt == RETRIES - 1:
-                return -1, None, f"[api_error] {e}", None, "error"
+                return {"prediction": -1, "p_vulnerable": None, "raw": f"[api_error] {e}",
+                        "billed": None, "finish_reason": "error", "cwe_pred": None}
             time.sleep(RETRY_BACKOFF_S * (attempt + 1))
     choice = response.choices[0]
     raw = choice.message.content or ""
     content = getattr(choice.logprobs, "content", None) if choice.logprobs else None
-    billed = _usage(response)
-    return (_tail_parse(raw, choice.finish_reason == "length"), None, raw, billed,
-            choice.finish_reason)
+    top = _verdict_token(content, prompt.verdict) if content else None
+    return {"prediction": _verdict_line(raw, prompt.verdict),
+            "p_vulnerable": extract_verdict(top)[1] if top else None,
+            "raw": raw, "billed": _usage(response), "finish_reason": choice.finish_reason,
+            "cwe_pred": parse_cwe(raw) if prompt.ask_cwe else None}
 
 
 def _usage(response):

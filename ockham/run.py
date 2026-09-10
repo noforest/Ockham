@@ -11,6 +11,7 @@ from typing import Optional
 
 from . import candidates as C
 from . import pricing
+from . import prompts
 from . import embeddings
 from . import samples as S
 from . import solver
@@ -115,7 +116,7 @@ class CellConfig:
     api_key: Optional[str] = None
     no_llm: bool = False
     logprobs: bool = True
-    max_tokens: int = solver.DEFAULT_MAX_TOKENS
+    max_tokens: Optional[int] = None      # None: the prompt entry's own
     reasoning: Optional[str] = None
     prompt: str = "v5"
     provider: Optional[str] = None
@@ -165,6 +166,8 @@ def run_cell(cfg):
                            target_last=cfg.target_last)
     needs_pool = cfg.selector in NEEDS_POOL
     C.set_backend(cfg.backend)
+    prompt = prompts.load(cfg.prompt)
+    max_tokens = cfg.max_tokens or prompt.max_tokens
 
     price_in, price_out = ((None, None) if cfg.no_llm else
                            pricing.rates(cfg.model, cfg.api_key, cfg.provider))
@@ -190,16 +193,17 @@ def run_cell(cfg):
             if cfg.show_pack:
                 print(f"\n----- {sample.sample_id} -----\n{pack['pack_text']}")
             if cfg.no_llm:
-                prediction, p_vulnerable, raw, billed = -1, None, "[no-llm]", None
-                finish_reason, llm_s = "no-llm", 0.0
+                reply = {"prediction": -1, "p_vulnerable": None, "raw": "[no-llm]",
+                         "billed": None, "finish_reason": "no-llm", "cwe_pred": None}
+                llm_s = 0.0
             else:
                 t_llm = time.time()
-                prediction, p_vulnerable, raw, billed, finish_reason = solver.predict(
-                    pack["pack_text"], cfg.model, cfg.base_url, cfg.api_key, seed=cfg.seed,
-                    logprobs=cfg.logprobs, max_tokens=cfg.max_tokens,
-                    reasoning=cfg.reasoning, prompt=cfg.prompt,
-                    provider=cfg.provider)
+                reply = solver.predict(pack["pack_text"], prompt, cfg.model, cfg.base_url,
+                                       max_tokens, api_key=cfg.api_key, seed=cfg.seed,
+                                       logprobs=cfg.logprobs, reasoning=cfg.reasoning,
+                                       provider=cfg.provider)
                 llm_s = time.time() - t_llm
+            prediction, raw, billed = reply["prediction"], reply["raw"], reply["billed"]
 
             pred_str = {1: "VULN", 0: "SAFE", -1: "??"}[prediction]
             mark = "??" if prediction == -1 else ("OK" if prediction == sample.label else "FAIL")
@@ -218,42 +222,52 @@ def run_cell(cfg):
                 "budget": cfg.budget, "backend": cfg.backend, "seed": cfg.seed,
                 "replicate": cfg.replicate,
                 "model": cfg.model, "base_url": cfg.base_url,
-                "reasoning": cfg.reasoning, "max_tokens": cfg.max_tokens,
-                "prompt": cfg.prompt, "target_last": cfg.target_last,
+                "reasoning": cfg.reasoning, "max_tokens": max_tokens,
+                "prompt": cfg.prompt, "prompt_sha": prompt.sha, "ask_cwe": prompt.ask_cwe,
+                "target_last": cfg.target_last,
                 "provider": cfg.provider,
                 "price_in": price_in, "price_out": price_out,
                 "s2_model": embeddings.MODEL_NAME,
-                "prediction": prediction, "p_vulnerable": p_vulnerable,
-                "model_output_raw": raw, "finish_reason": finish_reason,
+                "prediction": prediction, "p_vulnerable": reply["p_vulnerable"],
+                "cwe_pred": reply["cwe_pred"],
+                "model_output_raw": raw, "finish_reason": reply["finish_reason"],
                 "llm_time_s": llm_s,
                 "billed_prompt_tokens": (billed or {}).get("prompt"),
                 "billed_completion_tokens": (billed or {}).get("completion"),
                 "billed_reasoning_tokens": (billed or {}).get("reasoning"),
                 "target_tokens": C.count_tokens(sample.func_body),
-                "prompt_tokens_total": (C.count_tokens(solver.SYSTEM_PROMPTS[cfg.prompt])
+                "prompt_tokens_total": (C.count_tokens(prompt.text)
                                         + pack["pack_tokens"]),
                 **{k: v for k, v in pack.items() if k != "pack_text"},
             }
             out.write(json.dumps(record) + "\n")
             out.flush()
 
-            log.write(json.dumps({
+            entry = {
                 "run_id": run_id, "sample_id": sample.sample_id, "label": sample.label,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "model": cfg.model, "base_url": cfg.base_url, "provider": cfg.provider,
-                "temperature": 0, "max_tokens": cfg.max_tokens, "seed": cfg.seed,
+                "temperature": 0, "max_tokens": max_tokens, "seed": cfg.seed,
                 "reasoning": cfg.reasoning, "logprobs": cfg.logprobs,
-                "prompt_id": cfg.prompt,
+                "prompt_id": cfg.prompt, "prompt_sha": prompt.sha,
                 "selector": cfg.selector, "representation": cfg.representation,
                 "budget": cfg.budget, "backend": cfg.backend, "replicate": cfg.replicate,
-                "system_prompt": solver.SYSTEM_PROMPTS[cfg.prompt],
+                "system_prompt": prompt.text,
                 "user_message": pack["pack_text"],
                 "evidence_names": pack["evidence_names"],
-                "response": raw, "finish_reason": finish_reason,
-                "prediction": prediction, "llm_time_s": llm_s,
+                "response": raw, "finish_reason": reply["finish_reason"],
+                "prediction": prediction, "p_vulnerable": reply["p_vulnerable"],
+                "cwe_pred": reply["cwe_pred"], "llm_time_s": llm_s,
                 "billed": billed,
-            }) + "\n")
+            }
+            log.write(json.dumps(entry) + "\n")
             log.flush()
+            if prediction == -1 and not cfg.no_llm:
+                # the reply broke the format or was cut: saved apart for a manual read
+                reason = {"length": "truncated", "error": "api_error"}.get(
+                    reply["finish_reason"], "format")
+                with open(log_dir / f"unparsable_{run_id}.jsonl", "a", encoding="utf-8") as f:
+                    f.write(json.dumps({**entry, "reason": reason}) + "\n")
 
     part_path.replace(out_path)     # the final name means the cell finished
 
@@ -282,16 +296,15 @@ def main():
     ap.add_argument("--api-key", default=os.environ.get("OCKHAM_API_KEY"))
     ap.add_argument("--provider", default=None,
                     help="pin one OpenRouter host (no fallback), so a cell is repeatable")
-    ap.add_argument("--prompt", choices=list(solver.SYSTEM_PROMPTS), default="v5",
-                    help="the system prompt; only v5 remains, see solver.py for its sources")
+    ap.add_argument("--prompt", choices=prompts.names(), default="v5",
+                    help="an entry of prompts.toml")
     ap.add_argument("--target-last", action="store_true",
                     help="context first, target last with a closing anchor")
     ap.add_argument("--reasoning", choices=["off", "minimal", "low", "medium", "high"],
                     default=None,
                     help="thinking budget on routers that expose one; unset sends nothing")
-    ap.add_argument("--max-tokens", type=int, default=solver.DEFAULT_MAX_TOKENS,
-                    help="reply cap; only the first word is read, but a reasoning model "
-                         "spends its whole budget before emitting a verdict")
+    ap.add_argument("--max-tokens", type=int, default=None,
+                    help="reply cap; default: the prompt entry's own max_tokens")
     ap.add_argument("--no-logprobs", action="store_true",
                     help="hard verdict only: pAcc/MCC/F1 stay, rank/AUROC/Brier go away. "
                          "For endpoints with no logprob-capable provider.")

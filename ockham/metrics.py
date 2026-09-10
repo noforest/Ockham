@@ -11,6 +11,7 @@ from sklearn.metrics import (
     average_precision_score,
     balanced_accuracy_score,
     brier_score_loss,
+    confusion_matrix,
     f1_score,
     matthews_corrcoef,
     precision_score,
@@ -23,10 +24,13 @@ def load_results(path):
     return pd.read_json(path, lines=True)
 
 
-def _pair_groups(df):
+def _pair_keys(df):
     """Pairs are keyed within a replicate: pooled replicates would otherwise collide."""
-    keys = ["replicate", "pair_id"] if "replicate" in df else ["pair_id"]
-    return df.groupby(keys)
+    return ["replicate", "pair_id"] if "replicate" in df else ["pair_id"]
+
+
+def _pair_groups(df):
+    return df.groupby(_pair_keys(df))
 
 
 def _pairwise(df):
@@ -99,6 +103,46 @@ def _prob_metrics(df_parsed):
     }
 
 
+def _cwe_metrics(parsed):
+    """CWE asked on every reply, scored on the true positives against the dataset's list."""
+    if "cwe_pred" not in parsed or not parsed.cwe_pred.notna().any():
+        return {}
+    tp = parsed[(parsed.label == 1) & (parsed.prediction == 1)]
+    hits = [p in (c if isinstance(c, list) else [c]) for p, c in zip(tp.cwe_pred, tp.cwe)]
+    return {"cwe_acc": sum(hits) / len(hits) if hits else float("nan"),
+            "n_cwe_scored": len(hits),
+            "cwe_unknown_rate": float((parsed.cwe_pred == "UNKNOWN").mean())}
+
+
+def _reply_counts(clean):
+    """Why replies were dropped: cut before the verdict, or finished outside the format."""
+    if "finish_reason" not in clean:
+        return {}
+    fr, bad = clean.finish_reason, clean.prediction == -1
+    return {"n_truncated": int((fr == "length").sum()),
+            "n_truncated_parsed": int(((fr == "length") & ~bad).sum()),
+            "n_unparsable_truncated": int(((fr == "length") & bad).sum()),
+            "n_unparsable_format": int((bad & ~fr.isin(["length", "error", "no-llm"])).sum()),
+            "n_api_errors": int((fr == "error").sum())}
+
+
+def _operational(df):
+    """Failure-aware: the frozen set is the denominator and a failure is a wrong answer."""
+    if not len(df):
+        return {}
+    ok = (df.prediction != -1) & (df.n_backend_failures == 0)
+    y, pred = df.label, df.prediction.where(ok, 1 - df.label)
+    right = (pred == y).groupby([df[k] for k in _pair_keys(df)])
+    pair_ok = right.all() & (right.size() == 2)
+    return {"n_set": len(df), "n_set_vuln": int((y == 1).sum()),
+            "n_set_safe": int((y == 0).sum()), "failure_rate": float(1 - ok.mean()),
+            "accuracy_op": float(accuracy_score(y, pred)),
+            "balanced_accuracy_op": float(balanced_accuracy_score(y, pred)),
+            "MCC_op": float(matthews_corrcoef(y, pred)), "F1_op": float(f1_score(y, pred)),
+            "F1_trivial_op": float(f1_score(y, [1] * len(y))),
+            "n_pairs_set": int(len(pair_ok)), "pAcc_op": float(pair_ok.mean())}
+
+
 def compute_metrics(df):
     nan = float("nan")
     clean = df[df.n_backend_failures == 0] if len(df) else df
@@ -108,9 +152,14 @@ def compute_metrics(df):
 
     counts, n_pairs, n_pairs_dropped, n_pairs_incomplete = _pairwise(clean)
     rank_acc, n_ranked = _pair_rank_acc(parsed) if has else (nan, 0)
+    tn, fp, fn, tp = (confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
+                      if has else (0, 0, 0, 0))
     out = {
         "n_samples": len(df),
         "n_samples_excluding_backend_failures": len(clean),
+        # what task 1 is actually scored on: its size and balance move with the failures
+        "n_eval": len(parsed), "n_eval_vuln": int((parsed.label == 1).sum()),
+        "n_eval_safe": int((parsed.label == 0).sum()),
         "n_pairs": n_pairs,
         "n_pairs_dropped_unparsable": n_pairs_dropped,
         "n_pairs_dropped_backend_failure": n_pairs_incomplete,
@@ -125,11 +174,15 @@ def compute_metrics(df):
         "recall": float(recall_score(y_true, y_pred, zero_division=0)) if has else nan,
         "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)) if has else nan,
         "accuracy": float(accuracy_score(y_true, y_pred)) if has else nan,
+        "TP": int(tp), "FP": int(fp), "TN": int(tn), "FN": int(fn),
         "unparsable_rate": 1 - len(parsed) / len(clean) if len(clean) else nan,
     }
     out.update(_prob_metrics(parsed) if has else
                {"AUPRC": nan, "AUROC": nan, "Brier": nan, "calibration_error": nan,
                 "n_prob_samples": 0})
+    out.update(_cwe_metrics(parsed))
+    out.update(_reply_counts(clean))
+    out.update(_operational(df))
     out.update({
         # what the API billed for the reply: 8 tokens under v1, hundreds under v2/v3
         "mean_billed_completion_tokens": (float(df.billed_completion_tokens.mean())

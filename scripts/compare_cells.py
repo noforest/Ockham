@@ -5,6 +5,12 @@ import sys
 from math import comb
 from pathlib import Path
 
+import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from ockham.metrics import compute_metrics
+
 # No constant: each row carries the rate its host charged; unpinned runs are unpriced.
 
 
@@ -47,6 +53,38 @@ def mcnemar(a, b):
     return n01, n10, min(1.0, 2 * sum(comb(n, i) for i in range(k + 1)) / 2 ** n)
 
 
+def task1(cells):
+    """Each function on its own, replicates pooled; the bacc spread runs across replicates."""
+    print("\ntask 1: absolute detection, each function on its own "
+          "(always-VULNERABLE: acc 0.500, bacc 0.500, MCC 0)")
+    print(f"{'cell':22} {'n':>4} {'vuln':>4} {'safe':>4} {'acc':>6} {'bacc':>6} "
+          f"{'bacc spread':>13} {'MCC':>6} {'prec':>6} {'recall':>6} {'F1':>6} {'triv':>6} "
+          f"{'TP':>4} {'FP':>4} {'TN':>4} {'FN':>4}")
+    for name, reps in cells.items():
+        per = [compute_metrics(pd.DataFrame(rows))["balanced_accuracy"] for _, rows in reps]
+        m = compute_metrics(pd.DataFrame([r for _, rows in reps for r in rows]))
+        spread = f"[{min(per):.3f},{max(per):.3f}]" if len(per) > 1 else ""
+        print(f"{name:22} {m['n_eval']:4d} {m['n_eval_vuln']:4d} {m['n_eval_safe']:4d} "
+              f"{m['accuracy']:6.3f} {m['balanced_accuracy']:6.3f} {spread:>13} "
+              f"{m['MCC']:6.3f} {m['precision']:6.3f} {m['recall']:6.3f} {m['F1']:6.3f} "
+              f"{m['F1_trivial']:6.3f} {m['TP']:4d} {m['FP']:4d} {m['TN']:4d} {m['FN']:4d}")
+
+
+def operational(cells):
+    """Failure-aware: the frozen set is the denominator, a failure counts as a wrong answer."""
+    print("\noperational (failure-aware): denominator = the whole frozen set, "
+          "every failure counts as a wrong answer")
+    print(f"{'cell':22} {'n_set':>5} {'fail':>6} {'acc_op':>6} {'bacc_op':>7} {'MCC_op':>6} "
+          f"{'F1_op':>6} {'triv':>6} {'pairs':>5} {'pAcc_op':>7} {'pAcc_op spread':>15}")
+    for name, reps in cells.items():
+        per = [compute_metrics(pd.DataFrame(rows))["pAcc_op"] for _, rows in reps]
+        m = compute_metrics(pd.DataFrame([r for _, rows in reps for r in rows]))
+        spread = f"[{min(per):.3f},{max(per):.3f}]" if len(per) > 1 else ""
+        print(f"{name:22} {m['n_set']:5d} {m['failure_rate']:6.3f} {m['accuracy_op']:6.3f} "
+              f"{m['balanced_accuracy_op']:7.3f} {m['MCC_op']:6.3f} {m['F1_op']:6.3f} "
+              f"{m['F1_trivial_op']:6.3f} {m['n_pairs_set']:5d} {m['pAcc_op']:7.3f} {spread:>15}")
+
+
 def main(directory, ref=None):
     cells = load(directory)
     if not cells:
@@ -56,10 +94,13 @@ def main(directory, ref=None):
         correct[name] = {(i, p): outcome(d) == "P-C"
                          for i, (pairs, _) in enumerate(reps)
                          for p, d in pairs.items() if outcome(d) is not None}
+    task1(cells)
+    operational(cells)
     if ref:
-        print(f"\nreference McNemar : {ref}      (hasard apparie = 0.250)")
+        print(f"\ntask 2: paired discrimination   reference McNemar : {ref}"
+              f"      (hasard apparie = 0.250)")
     else:
-        print("\n(hasard apparie = 0.250)")
+        print("\ntask 2: paired discrimination   (hasard apparie = 0.250)")
     print(f"{'cellule':22} {'rep':>3} {'n':>4} {'pAcc':>6} {'etendue':>13} {'P-C':>4} {'P-V':>4} "
           f"{'P-B':>4} {'P-R':>4} {'illis':>6} {'usd':>7}"
           + (f" {'b':>3} {'c':>3} {'McNemar':>8}" if ref else ""))

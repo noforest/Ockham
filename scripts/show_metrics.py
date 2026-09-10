@@ -9,19 +9,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 try:                                  # so a copy of this file runs outside the repo too
     from ockham import candidates as C
-    from ockham import solver
-    SYSTEM_TOKENS = C.count_tokens(solver.SYSTEM_PROMPT)
-except ImportError:
+    from ockham import prompts
+    SYSTEM_TOKENS = C.count_tokens(prompts.load("v5").text)
+except (ImportError, OSError):
     SYSTEM_TOKENS = 120               # the v1 system prompt, measured; a fallback estimate
 
-DETECTION = [("pairs", "n_pairs"), ("drop", "n_pairs_dropped_unparsable"),
-             ("bkpair", "n_pairs_dropped_backend_failure"),
-             ("kept", "n_samples_excluding_backend_failures"),
-             # ("unprs", "unparsable_rate"), ("bkfail", "n_backend_failures_rate"),
-             ("pAcc", "pAcc"), ("P-C", "P-C"), ("P-V", "P-V"), ("P-B", "P-B"),
-             ("P-R", "P-R"), ("MCC", "MCC"), ("F1", "F1"), ("triv", "F1_trivial"),
-             ("recall", "recall"), ("balanced_acc", "balanced_accuracy"),]
-             # ("AUPRC", "AUPRC"), ("AUROC", "AUROC"), ("Brier", "Brier")]
+TASK1 = [("n", "n_eval"), ("vuln", "n_eval_vuln"), ("safe", "n_eval_safe"), ("acc", "accuracy"),
+         ("bacc", "balanced_accuracy"), ("MCC", "MCC"), ("prec", "precision"),
+         ("recall", "recall"), ("F1", "F1"), ("triv", "F1_trivial"), ("TP", "TP"),
+         ("FP", "FP"), ("TN", "TN"), ("FN", "FN"), ("AUPRC", "AUPRC"), ("cwe", "cwe_acc")]
+
+TASK2 = [("pairs", "n_pairs"), ("drop", "n_pairs_dropped_unparsable"),
+         ("bkpair", "n_pairs_dropped_backend_failure"), ("pAcc", "pAcc"), ("P-C", "P-C"),
+         ("P-V", "P-V"), ("P-B", "P-B"), ("P-R", "P-R"), ("rank", "pair_rank_acc"),
+         ("ranked", "n_pairs_ranked")]
+
+OPERATIONAL = [("n_set", "n_set"), ("vuln", "n_set_vuln"), ("safe", "n_set_safe"),
+               ("fail", "failure_rate"), ("acc_op", "accuracy_op"),
+               ("bacc_op", "balanced_accuracy_op"), ("MCC_op", "MCC_op"), ("F1_op", "F1_op"),
+               ("triv_op", "F1_trivial_op"), ("pairs", "n_pairs_set"), ("pAcc_op", "pAcc_op")]
+
+REPLIES = [("kept", "n_samples_excluding_backend_failures"), ("unpars", "unparsable_rate"),
+           ("trunc", "n_truncated"), ("trunc_ok", "n_truncated_parsed"),
+           ("cut", "n_unparsable_truncated"), ("format", "n_unparsable_format"),
+           ("api_err", "n_api_errors")]
 
 # Fallback only: the real rate and token counts come from the rows.
 
@@ -182,7 +193,25 @@ def _time_total(cells):
 
 def main():
     cells = load_cells(sys.argv[1] if len(sys.argv) > 1 else "results")
-    show(cells, DETECTION, "detection (s1)")
+    show(cells, TASK1,
+         "task 1: absolute detection, every function judged on its own\n"
+         "  n / vuln / safe: the functions actually scored and their balance; triv is computed\n"
+         "  on exactly those, so it moves with which functions failed\n"
+         "  always-VULNERABLE baseline on this 50/50 set: acc 0.500, bacc 0.500, MCC 0, F1 = triv\n"
+         "  AUPRC needs logprobs from the host, cwe a *_cwe prompt: '-' or nan otherwise")
+    show(cells, TASK2,
+         "task 2: paired discrimination, the vulnerable and the fixed version of one pair\n"
+         "  always-VULNERABLE baseline: pAcc 0 (P-V on every pair); random guessing: 0.25\n"
+         "  rank: share of pairs whose vulnerable half gets the higher p_vulnerable (logprobs)")
+    show(cells, OPERATIONAL,
+         "operational, failure-aware: the whole frozen set is the denominator, and every\n"
+         "  failure (unreadable reply or backend failure) counts as a wrong answer\n"
+         "  fail = share of the set that failed; triv_op is fixed by the set")
+    show(cells, REPLIES,
+         "replies: a reply cut at max_tokens whose verdict line is complete still counts (trunc_ok)\n"
+         "  cut     truncated before a complete verdict line: dropped\n"
+         "  format  finished, but the verdict is not exactly VULNERABLE or SAFE: dropped, and\n"
+         "          copied to logs/unparsable_<run_id>.jsonl for a manual read")
     show(cells, COST,
          "cost (s2 lightness, s3 scalability)   means over the samples of the run\n"
          "  pack     tokens actually sent: target function + context section\n"
