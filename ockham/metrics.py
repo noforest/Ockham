@@ -21,7 +21,8 @@ from sklearn.metrics import (
 
 
 def load_results(path):
-    return pd.read_json(path, lines=True)
+    # the default float parser drifts by 1e-15, enough to break p_vulnerable ties in pair_rank_acc
+    return pd.read_json(path, lines=True, precise_float=True)
 
 
 def _pair_keys(df):
