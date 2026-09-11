@@ -16,7 +16,7 @@ from ockham.metrics import compute_metrics
 
 def label(r):
     return (f"{r['selector']}/{r['representation']}/{r.get('prompt', 'v1')}"
-            f"{'/tl' if r.get('target_last') else ''}")
+            f"{'/tl' if r.get('target_last') else ''}/{r.get('model', '?').split('/')[-1]}")
 
 
 def load(directory):
@@ -57,30 +57,31 @@ def task1(cells):
     """Each function on its own, replicates pooled; the bacc spread runs across replicates."""
     print("\ntask 1: absolute detection, each function on its own "
           "(always-VULNERABLE: acc 0.500, bacc 0.500, MCC 0)")
-    print(f"{'cell':22} {'n':>4} {'vuln':>4} {'safe':>4} {'acc':>6} {'bacc':>6} "
+    print(f"{'cell':44} {'n':>4} {'vuln':>4} {'safe':>4} {'acc':>6} {'bacc':>6} "
           f"{'bacc spread':>13} {'MCC':>6} {'prec':>6} {'recall':>6} {'F1':>6} {'triv':>6} "
-          f"{'TP':>4} {'FP':>4} {'TN':>4} {'FN':>4}")
+          f"{'AUPRC':>6} {'TP':>4} {'FP':>4} {'TN':>4} {'FN':>4}")
     for name, reps in cells.items():
         per = [compute_metrics(pd.DataFrame(rows))["balanced_accuracy"] for _, rows in reps]
         m = compute_metrics(pd.DataFrame([r for _, rows in reps for r in rows]))
         spread = f"[{min(per):.3f},{max(per):.3f}]" if len(per) > 1 else ""
-        print(f"{name:22} {m['n_eval']:4d} {m['n_eval_vuln']:4d} {m['n_eval_safe']:4d} "
+        print(f"{name:44} {m['n_eval']:4d} {m['n_eval_vuln']:4d} {m['n_eval_safe']:4d} "
               f"{m['accuracy']:6.3f} {m['balanced_accuracy']:6.3f} {spread:>13} "
               f"{m['MCC']:6.3f} {m['precision']:6.3f} {m['recall']:6.3f} {m['F1']:6.3f} "
-              f"{m['F1_trivial']:6.3f} {m['TP']:4d} {m['FP']:4d} {m['TN']:4d} {m['FN']:4d}")
+              f"{m['F1_trivial']:6.3f} {m['AUPRC']:6.3f} {m['TP']:4d} {m['FP']:4d} {m['TN']:4d} "
+              f"{m['FN']:4d}")
 
 
 def operational(cells):
     """Failure-aware: the frozen set is the denominator, a failure counts as a wrong answer."""
     print("\noperational (failure-aware): denominator = the whole frozen set, "
           "every failure counts as a wrong answer")
-    print(f"{'cell':22} {'n_set':>5} {'fail':>6} {'acc_op':>6} {'bacc_op':>7} {'MCC_op':>6} "
+    print(f"{'cell':44} {'n_set':>5} {'fail':>6} {'acc_op':>6} {'bacc_op':>7} {'MCC_op':>6} "
           f"{'F1_op':>6} {'triv':>6} {'pairs':>5} {'pAcc_op':>7} {'pAcc_op spread':>15}")
     for name, reps in cells.items():
         per = [compute_metrics(pd.DataFrame(rows))["pAcc_op"] for _, rows in reps]
         m = compute_metrics(pd.DataFrame([r for _, rows in reps for r in rows]))
         spread = f"[{min(per):.3f},{max(per):.3f}]" if len(per) > 1 else ""
-        print(f"{name:22} {m['n_set']:5d} {m['failure_rate']:6.3f} {m['accuracy_op']:6.3f} "
+        print(f"{name:44} {m['n_set']:5d} {m['failure_rate']:6.3f} {m['accuracy_op']:6.3f} "
               f"{m['balanced_accuracy_op']:7.3f} {m['MCC_op']:6.3f} {m['F1_op']:6.3f} "
               f"{m['F1_trivial_op']:6.3f} {m['n_pairs_set']:5d} {m['pAcc_op']:7.3f} {spread:>15}")
 
@@ -101,8 +102,8 @@ def main(directory, ref=None):
               f"      (hasard apparie = 0.250)")
     else:
         print("\ntask 2: paired discrimination   (hasard apparie = 0.250)")
-    print(f"{'cellule':22} {'rep':>3} {'n':>4} {'pAcc':>6} {'etendue':>13} {'P-C':>4} {'P-V':>4} "
-          f"{'P-B':>4} {'P-R':>4} {'illis':>6} {'usd':>7}"
+    print(f"{'cellule':44} {'rep':>3} {'n':>4} {'pAcc':>6} {'etendue':>13} {'P-C':>4} {'P-V':>4} "
+          f"{'P-B':>4} {'P-R':>4} {'rank':>6} {'rank spread':>15} {'illis':>6} {'usd':>7}"
           + (f" {'b':>3} {'c':>3} {'McNemar':>8}" if ref else ""))
     total = 0.0
     for name, reps in cells.items():
@@ -127,9 +128,13 @@ def main(directory, ref=None):
                          if r.get("price_out")), None)
         usd = (tin * rate_in + tout * rate_out) if rate_in else float("nan")
         total += usd if usd == usd else 0.0
-        line = (f"{name:22} {len(reps):3d} {n:4d} {pacc:6.3f} {spread:>13} "
+        ranks = [compute_metrics(pd.DataFrame(rows))["pair_rank_acc"] for _, rows in reps]
+        rank = compute_metrics(pd.DataFrame([r for _, rows in reps for r in rows]))["pair_rank_acc"]
+        rspread = f"[{min(ranks):.3f},{max(ranks):.3f}]" if len(ranks) > 1 else ""
+        line = (f"{name:44} {len(reps):3d} {n:4d} {pacc:6.3f} {spread:>13} "
                 f"{counts.get('P-C', 0):4d} {counts.get('P-V', 0):4d} "
-                f"{counts.get('P-B', 0):4d} {counts.get('P-R', 0):4d} {bad:6d} {usd:7.4f}")
+                f"{counts.get('P-B', 0):4d} {counts.get('P-R', 0):4d} {rank:6.3f} {rspread:>15} "
+                f"{bad:6d} {usd:7.4f}")
         if ref:
             n01, n10, p = mcnemar(correct[ref], correct[name])
             line += f" {n01:3d} {n10:3d} {p:8.3f}"

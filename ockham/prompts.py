@@ -38,7 +38,7 @@ def load(name):
     else:
         spec = [cfg["lines"][k].format_map(v) for k in lines]
         ret = f"Return exactly {_COUNT[len(spec)]} and nothing else:\n" + "\n".join(spec)
-        text = cfg["template"].format_map({**v, "RETURN_OPT": ret})
+        text = cfg[entry.get("template", "template")].format_map({**v, "RETURN_OPT": ret})
     text = text.strip()
     return Prompt(name, text, entry.get("verdict", "first"), "cwe" in lines,
                   entry["max_tokens"], hashlib.sha256(text.encode()).hexdigest()[:12])
